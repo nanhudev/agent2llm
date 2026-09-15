@@ -1,0 +1,272 @@
+/**
+ * Shared runtime for CLI-driven Harness adapters.
+ *
+ * Every real coding agent we support ships (or can be driven by) a command
+ * line entry point. This base class owns everything that is genuinely common
+ * — binary discovery, `--help` capability probing, subprocess execution,
+ * event normalisation, cancellation — and leaves only product knowledge
+ * (argv shape, output parsing) to the concrete adapter.
+ */
+import { emptyManifest, type CapabilityManifest } from "@agent2llm/protocol";
+import { harnessUnavailable } from "@agent2llm/core";
+import { locateBinary, type BinaryLocation } from "@agent2llm/detect";
+import { helpMentions, readHelp, runProcess, type RunningProcess } from "@agent2llm/transports";
+import {
+  BaseHarnessAdapter,
+  type AdapterMetadata,
+  type DetectionResult,
+  type DetectContext,
+  type ExecutionHandle,
+  type ExecutionRequest,
+  type HarnessEvent,
+  type HarnessSession,
+} from "@agent2llm/adapter-sdk";
+
+export interface CliHarnessProfile {
+  id: string;
+  name: string;
+  bin: string;
+  /** Alternate binary names (e.g. `agent` for `cursor-agent`). */
+  altBins?: readonly string[];
+  vendor?: string;
+  homepage?: string;
+  /** Extra installation locations probed beyond PATH. */
+  candidates?: readonly string[];
+  experimental?: boolean;
+  /** Product this adapter drives, shown by `agent2llm adapters`. */
+  drives?: string;
+}
+
+export interface ExecutionAccumulator {
+  ok: boolean;
+  exitStatus: string;
+  changedFiles: string[];
+  tests: string | null;
+  summary: string;
+  commands: string[];
+  sessionRef: string | null;
+}
+
+export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
+  protected location: BinaryLocation | null = null;
+  protected help: string | null = null;
+  private readonly runs = new Map<string, RunningProcess>();
+  private readonly sessionRefs = new Map<string, string>();
+
+  constructor(protected readonly profile: CliHarnessProfile) {
+    super();
+  }
+
+  metadata(): AdapterMetadata {
+    return {
+      id: this.profile.id,
+      name: this.profile.name,
+      version: "0.1.0",
+      role: "harness",
+      ...(this.profile.vendor ? { vendor: this.profile.vendor } : {}),
+      ...(this.profile.homepage ? { homepage: this.profile.homepage } : {}),
+      experimental: this.profile.experimental ?? false,
+      ...(this.profile.drives ? { drives: this.profile.drives } : { drives: this.profile.bin }),
+    };
+  }
+
+  // ---- discovery -----------------------------------------------------------
+
+  async detect(ctx: DetectContext = {}): Promise<DetectionResult> {
+    const names = [this.profile.bin, ...(this.profile.altBins ?? [])];
+    for (const name of names) {
+      const found = await locateBinary(name, {
+        candidates: this.profile.candidates,
+        probeVersion: !ctx.quick,
+      });
+      if (found) {
+        this.location = found;
+        if (!ctx.quick) this.help = await readHelp(found.path).catch(() => null);
+        return {
+          status: "detected",
+          binaryPath: found.path,
+          ...(found.version ? { version: found.version } : {}),
+          reason: `Found ${name} at ${found.path} (${found.source}).`,
+        };
+      }
+    }
+    return {
+      status: "implemented",
+      reason: `${names.join(" / ")} was not found on PATH or in the probed install locations.`,
+      notes: ["Install the product and re-run `agent2llm detect` to enable this harness."],
+    };
+  }
+
+  protected isDetected(): boolean {
+    return this.location !== null;
+  }
+
+  protected requireBinary(): BinaryLocation {
+    if (!this.location) {
+      throw harnessUnavailable(
+        `${this.profile.name} is not installed or not on PATH. Install it, then run 'agent2llm detect'.`
+      );
+    }
+    return this.location;
+  }
+
+  /** True when the probed `--help` output mentions the flag. */
+  protected hasFlag(flag: string): boolean {
+    return helpMentions(this.help, flag);
+  }
+
+  protected emptyManifestFor(transport: CapabilityManifest["transport"]): CapabilityManifest {
+    return emptyManifest(transport);
+  }
+
+  // ---- product-specific hooks ---------------------------------------------
+
+  /** argv for one execution round. Must not invent flags: check `hasFlag`. */
+  protected abstract buildArgs(task: ExecutionRequest, session: HarnessSession): string[];
+
+  /** Map one output line to a normalized event, or null to ignore it. */
+  protected abstract parseLine(line: string): HarnessEvent | null;
+
+  /** Pull a resumable session/thread id out of the output stream. */
+  protected abstract extractSessionRef(line: string): string | null;
+
+  /** Optional: derive changed files from a product-specific event payload. */
+  protected extractChangedFiles(_line: string): string[] {
+    return [];
+  }
+
+  // ---- lifecycle -----------------------------------------------------------
+
+  async createSession(): Promise<HarnessSession> {
+    return { id: `${this.profile.id}-${Date.now()}`, adapterId: this.profile.id, ref: {} };
+  }
+
+  async attachSession(checkpoint: { adapterId: string; ref: Record<string, unknown> }): Promise<HarnessSession> {
+    const ref = checkpoint.ref.sessionRef;
+    if (typeof ref === "string") this.sessionRefs.set("last", ref);
+    return { id: `${this.profile.id}-${Date.now()}`, adapterId: this.profile.id, ref: checkpoint.ref };
+  }
+
+  async execute(session: HarnessSession, task: ExecutionRequest): Promise<ExecutionHandle> {
+    const bin = this.requireBinary();
+    const handleId = `${this.profile.id}-${task.taskId}-${task.iteration}-${Date.now()}`;
+    const args = this.buildArgs(task, session);
+    const proc = runProcess({
+      bin: bin.path,
+      args,
+      cwd: task.workspaceRoot,
+      timeoutMs: 45 * 60 * 1000,
+    });
+    this.runs.set(handleId, proc);
+    return { id: handleId, adapterId: this.profile.id, ref: { args, pid: proc.child.pid ?? 0 } };
+  }
+
+  async *events(handle: ExecutionHandle): AsyncIterable<HarnessEvent> {
+    const proc = this.runs.get(handle.id);
+    if (!proc) {
+      yield {
+        type: "failed",
+        at: new Date().toISOString(),
+        error: { code: "ExecutionFailed", message: `Unknown execution handle ${handle.id}.` },
+      };
+      return;
+    }
+    yield { type: "started", at: new Date().toISOString(), handleId: handle.id };
+
+    const acc: ExecutionAccumulator = {
+      ok: false,
+      exitStatus: "running",
+      changedFiles: [],
+      tests: null,
+      summary: "",
+      commands: [],
+      sessionRef: null,
+    };
+    let lastText = "";
+
+    for await (const event of proc.events()) {
+      if (event.stream === "stderr") {
+        yield { type: "log", at: new Date().toISOString(), message: event.line.slice(0, 500) };
+        continue;
+      }
+      const ref = this.extractSessionRef(event.line);
+      if (ref) {
+        acc.sessionRef = ref;
+        this.sessionRefs.set("last", ref);
+      }
+      for (const file of this.extractChangedFiles(event.line)) {
+        if (!acc.changedFiles.includes(file)) acc.changedFiles.push(file);
+      }
+      const parsed = this.parseLine(event.line);
+      if (parsed) {
+        if (parsed.type === "log") lastText = parsed.message;
+        yield parsed;
+      } else {
+        lastText = event.line;
+        yield { type: "log", at: new Date().toISOString(), message: event.line.slice(0, 500) };
+      }
+    }
+
+    const outcome = await proc.outcome();
+    acc.ok = !outcome.timedOut && outcome.exitCode === 0;
+    acc.exitStatus = outcome.timedOut ? "timeout" : String(outcome.exitCode ?? "unknown");
+    acc.summary = outcome.timedOut
+      ? `${this.profile.name} timed out.`
+      : (lastText || `${this.profile.name} finished with exit code ${outcome.exitCode}.`).slice(0, 500);
+
+    this.runs.delete(handle.id);
+
+    yield {
+      type: acc.ok ? "completed" : "failed",
+      at: new Date().toISOString(),
+      ...(acc.ok
+        ? {
+            result: {
+              ok: true,
+              exitStatus: acc.exitStatus,
+              changedFiles: acc.changedFiles,
+              tests: acc.tests,
+              summary: acc.summary,
+              commands: acc.commands,
+              durationMs: outcome.durationMs,
+            },
+          }
+        : {
+            error: {
+              code: outcome.timedOut ? "Timeout" : "ExecutionFailed",
+              message: acc.summary,
+            },
+          }),
+    } as HarnessEvent;
+  }
+
+  async cancel(handle: ExecutionHandle): Promise<void> {
+    this.runs.get(handle.id)?.cancel();
+  }
+
+  async close(): Promise<void> {
+    for (const proc of this.runs.values()) proc.cancel();
+    this.runs.clear();
+  }
+
+  protected lastSessionRef(): string | null {
+    return this.sessionRefs.get("last") ?? null;
+  }
+}
+
+/** Shared helper: pull a JSON object out of a possibly-prefixed line. */
+export function parseJsonLine(line: string): Record<string, unknown> | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("{")) return null;
+  try {
+    const value: unknown = JSON.parse(trimmed);
+    return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function stripAnsi(input: string): string {
+  // eslint-disable-next-line no-control-regex
+  return input.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "");
+}

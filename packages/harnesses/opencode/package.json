@@ -1,0 +1,24 @@
+{
+  "name": "@agent2llm/harness-opencode",
+  "version": "0.1.0",
+  "description": "Agent2LLM harness-opencode package",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@agent2llm/adapter-sdk": "*",
+    "@agent2llm/harness-cli-runtime": "*",
+    "@agent2llm/protocol": "*"
+  }
+}

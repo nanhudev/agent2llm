@@ -1,0 +1,26 @@
+{
+  "name": "@agent2llm/harness-cli-runtime",
+  "version": "0.1.0",
+  "description": "Shared runtime for CLI-driven Agent2LLM harness adapters",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@agent2llm/adapter-sdk": "*",
+    "@agent2llm/core": "*",
+    "@agent2llm/detect": "*",
+    "@agent2llm/protocol": "*",
+    "@agent2llm/transports": "*"
+  }
+}

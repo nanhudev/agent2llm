@@ -1,0 +1,27 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../adapter-sdk"
+    },
+    {
+      "path": "../../core"
+    },
+    {
+      "path": "../../detect"
+    },
+    {
+      "path": "../../protocol"
+    },
+    {
+      "path": "../../transports"
+    }
+  ]
+}
