@@ -1,0 +1,30 @@
+{
+  "name": "@agent2llm/bridge",
+  "version": "0.1.0",
+  "description": "Agent2LLM bridge package",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@agent2llm/auth": "*",
+    "@agent2llm/config": "*",
+    "@agent2llm/logger": "*",
+    "@agent2llm/mcp": "*",
+    "@agent2llm/pairing": "*",
+    "@agent2llm/session": "*",
+    "@agent2llm/tunnel": "*",
+    "@agent2llm/workspace": "*",
+    "express": "^5.1.0"
+  }
+}

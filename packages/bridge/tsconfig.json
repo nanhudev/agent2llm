@@ -1,0 +1,36 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../auth"
+    },
+    {
+      "path": "../config"
+    },
+    {
+      "path": "../logger"
+    },
+    {
+      "path": "../mcp"
+    },
+    {
+      "path": "../pairing"
+    },
+    {
+      "path": "../session"
+    },
+    {
+      "path": "../tunnel"
+    },
+    {
+      "path": "../workspace"
+    }
+  ]
+}
