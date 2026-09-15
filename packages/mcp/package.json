@@ -1,0 +1,28 @@
+{
+  "name": "@agent2llm/mcp",
+  "version": "0.1.0",
+  "description": "Agent2LLM mcp package",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@agent2llm/auth": "*",
+    "@agent2llm/execution": "*",
+    "@agent2llm/logger": "*",
+    "@agent2llm/session": "*",
+    "@agent2llm/workspace": "*",
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "zod": "^3.25.0"
+  }
+}

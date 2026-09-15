@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../auth"
+    },
+    {
+      "path": "../execution"
+    },
+    {
+      "path": "../logger"
+    },
+    {
+      "path": "../session"
+    },
+    {
+      "path": "../workspace"
+    }
+  ]
+}
