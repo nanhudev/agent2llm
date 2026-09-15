@@ -50,6 +50,7 @@ export interface ExecutionAccumulator {
 export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
   protected location: BinaryLocation | null = null;
   protected help: string | null = null;
+  private detectAttempted = false;
   private readonly runs = new Map<string, RunningProcess>();
   private readonly sessionRefs = new Map<string, string>();
 
@@ -70,9 +71,23 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
     };
   }
 
+  /**
+   * Capability manifests for a CLI harness depend on what is actually
+   * installed, so discovery runs once on demand.
+   *
+   * Without this, a consumer that asks for capabilities before calling
+   * `detect()` would see an empty manifest and conclude — wrongly — that the
+   * harness lacks `shell.execute` and friends.
+   */
+  override async capabilities(): Promise<CapabilityManifest> {
+    if (!this.location && !this.detectAttempted) await this.detect();
+    return super.capabilities();
+  }
+
   // ---- discovery -----------------------------------------------------------
 
   async detect(ctx: DetectContext = {}): Promise<DetectionResult> {
+    this.detectAttempted = true;
     const names = [this.profile.bin, ...(this.profile.altBins ?? [])];
     for (const name of names) {
       const found = await locateBinary(name, {
