@@ -18,6 +18,7 @@ import type {
   BrainAdapter,
   BrainSession,
   HarnessAdapter,
+  ReadOnlyDataPlane,
   UserActionRequest,
 } from "@agent2llm/adapter-sdk";
 import type { CollaborationSession, SessionStore } from "@agent2llm/session";
@@ -48,6 +49,11 @@ export interface OrchestratorDeps {
   requestUserAction?: (action: UserActionRequest) => Promise<void>;
   /** Abort the run (Ctrl-C, session stop). */
   signal?: AbortSignal;
+  /**
+   * Read-only workspace surface handed to Brains that cannot reach MCP
+   * themselves (for example an API Brain). Optional by design.
+   */
+  dataPlane?: ReadOnlyDataPlane;
 }
 
 export interface RunOptions {
@@ -100,6 +106,10 @@ export class Orchestrator {
     const harness = this.deps.registry.getHarness(options.harnessId);
     const { workflowId, requirement } = resolveWorkflow(options.workflowId);
 
+    // A Brain that cannot reach MCP itself still has to be able to review, so
+    // the read-only surface is offered before capabilities are read.
+    this.offerDataPlane(brain);
+
     // The Brain must be able to inspect the workspace, otherwise "independent
     // review" would be theatre. Enforced by code, not by configuration.
     assertAllowed(this.policy, "brain", "workspace.read");
@@ -111,6 +121,7 @@ export class Orchestrator {
       logger: this.logger,
       workflowId,
       requirement,
+      ...(options.dryRun ? { ignoreAuth: true } : {}),
     });
 
     const session = loadOrCreateSession(this.deps.sessions, this.deps.workspaceId, options, workflowId);
@@ -189,6 +200,12 @@ export class Orchestrator {
   }
 
   // ---- phases ----------------------------------------------------------------
+
+  private offerDataPlane(brain: BrainAdapter): void {
+    if (!this.deps.dataPlane) return;
+    const candidate = brain as BrainAdapter & { attachDataPlane?: (dp: ReadOnlyDataPlane) => void };
+    candidate.attachDataPlane?.(this.deps.dataPlane);
+  }
 
   private async loop(input: {
     channel: ControlChannel;

@@ -34,6 +34,14 @@ export interface CompatibilityInput {
   harness: CapabilityManifest;
   workflowId: string;
   requirement: CapabilityRequirement;
+  /**
+   * Treat "not logged in yet" as a warning instead of a failure.
+   *
+   * Used by `--dry-run`, whose job is to answer "is this combination
+   * *capable*?" Authentication is a setup step the run itself will walk the
+   * user through, not a capability gap.
+   */
+  ignoreAuth?: boolean;
 }
 
 export function checkCompatibility(input: CompatibilityInput): CompatibilityReport {
@@ -83,7 +91,7 @@ export function checkCompatibility(input: CompatibilityInput): CompatibilityRepo
 
   if (input.brain.auth.required && !input.brain.auth.authenticated) {
     issues.push({
-      severity: "fail",
+      severity: input.ignoreAuth ? "warn" : "fail",
       target: "brain",
       code: "BRAIN_NOT_AUTHENTICATED",
       message: `Brain adapter '${input.brainId}' requires authentication (${input.brain.auth.method ?? "unknown"}).`,

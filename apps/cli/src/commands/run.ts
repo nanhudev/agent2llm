@@ -9,7 +9,8 @@ import { AdapterRegistry } from "@agent2llm/adapter-sdk";
 import { loadMachineConfig } from "@agent2llm/config";
 import { Logger } from "@agent2llm/logger";
 import { SessionStore } from "@agent2llm/session";
-import { WorkspaceRegistry } from "@agent2llm/workspace";
+import { Workspace, WorkspaceRegistry } from "@agent2llm/workspace";
+import { createInProcessDataPlane } from "@agent2llm/mcp";
 import { Orchestrator } from "@agent2llm/orchestrator";
 import { A2LError, isA2LError, toA2LError } from "@agent2llm/core";
 import { formatEventHuman } from "@agent2llm/core";
@@ -57,6 +58,7 @@ export async function runRun(registry: AdapterRegistry, options: RunOptions): Pr
       }
     },
     requestUserAction: ui.requestUserAction,
+    dataPlane: createInProcessDataPlane(new Workspace(record.root, { id: record.id })),
   });
 
   const goal = options.goal ?? (await ui.promptText("Goal"));
@@ -79,6 +81,8 @@ export async function runRun(registry: AdapterRegistry, options: RunOptions): Pr
     });
     spin.succeed(result.summary);
     if (options.json) ui.jsonOutput({ ...result, events });
+    // A successful dry run is a success, even though it stops at READY.
+    if (options.dryRun) return 0;
     return result.state === "DONE" ? 0 : 1;
   } catch (error) {
     spin.stop();

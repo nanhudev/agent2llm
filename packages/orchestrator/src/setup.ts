@@ -14,6 +14,11 @@ import type { RunOptions } from "./runner.js";
 export interface Preflight {
   workflowId: string;
   requirement: Parameters<typeof checkCompatibility>[0]["requirement"];
+  /**
+   * `--dry-run` answers "is this combination capable?", so pending
+   * authentication is a warning there rather than a hard failure.
+   */
+  ignoreAuth?: boolean;
 }
 
 /**
@@ -36,6 +41,7 @@ export async function assertCompatible(
     harness: await input.harness.capabilities(),
     workflowId: input.workflowId,
     requirement: input.requirement,
+    ...(input.ignoreAuth ? { ignoreAuth: true } : {}),
   });
   if (!report.ok) throw adapterIncompatible(explainReport(report), { details: { issues: report.issues } });
   for (const issue of report.issues) input.logger.warn(issue.message);
