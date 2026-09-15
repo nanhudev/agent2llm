@@ -1,0 +1,72 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/adapter-sdk"
+    },
+    {
+      "path": "../../packages/brains/api"
+    },
+    {
+      "path": "../../packages/brains/chatgpt-web"
+    },
+    {
+      "path": "../../packages/brains/claude-web"
+    },
+    {
+      "path": "../../packages/brains/mock"
+    },
+    {
+      "path": "../../packages/bridge"
+    },
+    {
+      "path": "../../packages/config"
+    },
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/harnesses/claude-code"
+    },
+    {
+      "path": "../../packages/harnesses/codex"
+    },
+    {
+      "path": "../../packages/harnesses/cursor"
+    },
+    {
+      "path": "../../packages/harnesses/mock"
+    },
+    {
+      "path": "../../packages/harnesses/opencode"
+    },
+    {
+      "path": "../../packages/harnesses/workbuddy"
+    },
+    {
+      "path": "../../packages/logger"
+    },
+    {
+      "path": "../../packages/orchestrator"
+    },
+    {
+      "path": "../../packages/session"
+    },
+    {
+      "path": "../../packages/transports"
+    },
+    {
+      "path": "../../packages/tunnel"
+    },
+    {
+      "path": "../../packages/workspace"
+    }
+  ]
+}

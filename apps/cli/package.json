@@ -1,0 +1,43 @@
+{
+  "name": "@agent2llm/cli",
+  "version": "0.1.0",
+  "description": "Agent2LLM cli package",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@agent2llm/adapter-sdk": "*",
+    "@agent2llm/brain-api": "*",
+    "@agent2llm/brain-chatgpt-web": "*",
+    "@agent2llm/brain-claude-web": "*",
+    "@agent2llm/brain-mock": "*",
+    "@agent2llm/bridge": "*",
+    "@agent2llm/config": "*",
+    "@agent2llm/core": "*",
+    "@agent2llm/harness-claude-code": "*",
+    "@agent2llm/harness-codex": "*",
+    "@agent2llm/harness-cursor": "*",
+    "@agent2llm/harness-deepseek": "*",
+    "@agent2llm/harness-mock": "*",
+    "@agent2llm/harness-opencode": "*",
+    "@agent2llm/harness-workbuddy": "*",
+    "@agent2llm/logger": "*",
+    "@agent2llm/orchestrator": "*",
+    "@agent2llm/session": "*",
+    "@agent2llm/transports": "*",
+    "@agent2llm/tunnel": "*",
+    "@agent2llm/workspace": "*",
+    "commander": "^14.0.0"
+  }
+}
