@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: ${{ matrix.os }} / node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Agent detection is platform-dependent, so Windows is not optional.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck / build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+        env:
+          AGENT2LLM_STATE_DIR: ${{ runner.temp }}/a2l-state
+
+      - name: CLI smoke
+        run: node apps/cli/dist/index.js --help
+        env:
+          AGENT2LLM_STATE_DIR: ${{ runner.temp }}/a2l-state
+
+      - name: Mock end-to-end
+        run: node apps/cli/dist/index.js run --brain mock-brain --harness mock-harness --goal "smoke"
+        env:
+          AGENT2LLM_STATE_DIR: ${{ runner.temp }}/a2l-state
