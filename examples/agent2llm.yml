@@ -1,0 +1,18 @@
+# .agent2llm.yml — workspace-scoped, non-secret preferences only.
+#
+# Secrets never belong here. OAuth refresh tokens, API keys and cookies live in
+# the OS keychain or the private state directory (~/.agent2llm).
+
+preferred:
+  brain: chatgpt-web
+  harness: dsh
+  workflow: brain-hands
+
+run:
+  maxIterations: 12
+
+# Extra ignore rules on top of .agent2llmignore / .c2cignore.
+ignore:
+  - "dist/**"
+  - "coverage/**"
+  - "*.local.txt"
