@@ -1,0 +1,28 @@
+{
+  "name": "@agent2llm/orchestrator",
+  "version": "0.1.0",
+  "description": "Agent2LLM orchestrator package",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@agent2llm/adapter-sdk": "*",
+    "@agent2llm/core": "*",
+    "@agent2llm/execution": "*",
+    "@agent2llm/logger": "*",
+    "@agent2llm/protocol": "*",
+    "@agent2llm/session": "*",
+    "@agent2llm/workspace": "*"
+  }
+}
