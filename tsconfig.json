@@ -1,0 +1,116 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/protocol"
+    },
+    {
+      "path": "packages/config"
+    },
+    {
+      "path": "packages/logger"
+    },
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/detect"
+    },
+    {
+      "path": "packages/adapter-sdk"
+    },
+    {
+      "path": "packages/pairing"
+    },
+    {
+      "path": "packages/auth"
+    },
+    {
+      "path": "packages/workspace"
+    },
+    {
+      "path": "packages/execution"
+    },
+    {
+      "path": "packages/session"
+    },
+    {
+      "path": "packages/mcp"
+    },
+    {
+      "path": "packages/tunnel"
+    },
+    {
+      "path": "packages/bridge"
+    },
+    {
+      "path": "packages/process"
+    },
+    {
+      "path": "packages/transports"
+    },
+    {
+      "path": "packages/brains/web-runtime"
+    },
+    {
+      "path": "packages/brains/mock"
+    },
+    {
+      "path": "packages/brains/chatgpt-web"
+    },
+    {
+      "path": "packages/brains/claude-web"
+    },
+    {
+      "path": "packages/brains/api"
+    },
+    {
+      "path": "packages/harnesses/cli-runtime"
+    },
+    {
+      "path": "packages/harnesses/mock"
+    },
+    {
+      "path": "packages/harnesses/deepseek-harness"
+    },
+    {
+      "path": "packages/harnesses/workbuddy"
+    },
+    {
+      "path": "packages/harnesses/codex"
+    },
+    {
+      "path": "packages/harnesses/cursor"
+    },
+    {
+      "path": "packages/harnesses/claude-code"
+    },
+    {
+      "path": "packages/harnesses/opencode"
+    },
+    {
+      "path": "packages/workflows/brain-hands"
+    },
+    {
+      "path": "packages/workflows/peer"
+    },
+    {
+      "path": "packages/workflows/planner-only"
+    },
+    {
+      "path": "packages/workflows/review-only"
+    },
+    {
+      "path": "packages/orchestrator"
+    },
+    {
+      "path": "packages/testing"
+    },
+    {
+      "path": "packages/fixtures"
+    },
+    {
+      "path": "apps/cli"
+    }
+  ]
+}

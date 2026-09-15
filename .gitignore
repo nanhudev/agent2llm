@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+
+# Local Agent2LLM state (secrets, pairing, sessions) — never in the repo.
+.agent2llm/
+*.log
+.env
+.env.*
+!.env.example
