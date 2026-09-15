@@ -28,7 +28,7 @@
     "@agent2llm/harness-claude-code": "*",
     "@agent2llm/harness-codex": "*",
     "@agent2llm/harness-cursor": "*",
-    "@agent2llm/harness-deepseek": "*",
+    "@agent2llm/harness-deepseek-harness": "*",
     "@agent2llm/harness-mock": "*",
     "@agent2llm/harness-opencode": "*",
     "@agent2llm/harness-workbuddy": "*",

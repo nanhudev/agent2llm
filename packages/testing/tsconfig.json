@@ -7,5 +7,12 @@
   "include": [
     "src/**/*.ts"
   ],
-  "references": []
+  "references": [
+    {
+      "path": "../adapter-sdk"
+    },
+    {
+      "path": "../protocol"
+    }
+  ]
 }

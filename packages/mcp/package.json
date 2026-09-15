@@ -17,6 +17,7 @@
     "dist"
   ],
   "dependencies": {
+    "@agent2llm/adapter-sdk": "*",
     "@agent2llm/auth": "*",
     "@agent2llm/execution": "*",
     "@agent2llm/logger": "*",

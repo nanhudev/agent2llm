@@ -42,6 +42,9 @@
       "path": "../../packages/harnesses/cursor"
     },
     {
+      "path": "../../packages/harnesses/deepseek-harness"
+    },
+    {
       "path": "../../packages/harnesses/mock"
     },
     {
