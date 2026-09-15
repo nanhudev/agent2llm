@@ -207,6 +207,10 @@ agent2llm version
 | `opencode` | harness | implemented | **未验证** — 本机未安装 |
 | `mock-harness` | harness | verified | 已跑通 |
 
+API Brain 是唯一没有自带 MCP 客户端的 Brain，因此它通过进程内的只读工具面 +
+provider 的 tool calling 来读取工作区。没有 data plane 时它会如实声明「无工作区
+访问」，绝不假装 —— 见 [`docs/adapters/api.md`](docs/adapters/api.md)。
+
 图例：**implemented** = 代码完整且契约测试通过 · **detected** = 本机已找到 ·
 **verified** = 端到端实测通过。
 

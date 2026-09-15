@@ -201,13 +201,17 @@ Captured with `agent2llm adapters` on the development machine:
 | `chatgpt-web` | brain | implemented | **unverified** — needs login |
 | `claude-web` | brain | implemented | **unverified** — needs login |
 | `api` | brain | implemented | **unverified** — needs a key |
-| `dsh` | harness | **detected** (`0.1.2-rc.1`) | not run (would spend quota) |
 | `workbuddy` | harness | **detected** (`codebuddy` 2.137.1) | not run |
 | `codex` | harness | implemented | **unverified** — not installed here |
 | `cursor` | harness | implemented | **unverified** — not installed here |
 | `claude-code` | harness | implemented | **unverified** — not installed here |
 | `opencode` | harness | implemented | **unverified** — not installed here |
 | `mock-harness` | harness | verified | yes |
+
+The API Brain is the one Brain with no MCP client of its own, so it gets the
+read-only tool surface **in-process** and calls it through provider tool calling.
+Without a data plane it declares no workspace access rather than pretending —
+see [`docs/adapters/api.md`](docs/adapters/api.md).
 
 Legend: **implemented** = code complete and contract suite green ·
 **detected** = found on this machine · **verified** = end-to-end observed.
