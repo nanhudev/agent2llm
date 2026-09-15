@@ -41,6 +41,29 @@ export interface SetupContext {
   requestUserAction?: (action: UserActionRequest) => Promise<void>;
 }
 
+/**
+ * A read-only view of the workspace, expressed as callable tools.
+ *
+ * Web brains reach the same surface over MCP; a Brain that is "just an
+ * inference endpoint" gets it in-process. Either way the surface is the same
+ * and it has no mutation tools.
+ */
+export interface DataPlaneToolSpec {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
+export interface DataPlaneCallResult {
+  ok: boolean;
+  text: string;
+}
+
+export interface ReadOnlyDataPlane {
+  readonly tools: readonly DataPlaneToolSpec[];
+  call(name: string, args: Record<string, unknown>): Promise<DataPlaneCallResult>;
+}
+
 export interface UserActionRequest {
   kind: "login" | "captcha" | "oauth-approve" | "two-factor" | "pairing-code" | "install" | "open-url";
   message: string;

@@ -1,5 +1,6 @@
 export * from "./server.js";
 export * from "./http.js";
+export * from "./data-plane.js";
 
 /** The Brain-facing tool surface. Mutation tools must never appear here. */
 export const READ_ONLY_MCP_TOOLS = [

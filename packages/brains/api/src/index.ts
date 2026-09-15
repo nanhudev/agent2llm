@@ -19,6 +19,7 @@ import {
   type BrainSession,
   type BrainSessionContext,
   type DetectionResult,
+  type ReadOnlyDataPlane,
   type SetupContext,
   type SetupResult,
   type VerificationResult,
@@ -32,6 +33,9 @@ interface ApiSessionState {
 
 const sessions = new Map<string, ApiSessionState>();
 
+/** How many tool rounds a single control reply may spend inspecting. */
+const MAX_TOOL_ROUNDS = 12;
+
 export interface ApiBrainOptions {
   provider?: BrainProvider;
   model?: string;
@@ -39,10 +43,26 @@ export interface ApiBrainOptions {
 
 export class ApiBrain extends BaseBrainAdapter {
   private readonly provider: BrainProvider;
+  private dataPlane: ReadOnlyDataPlane | null = null;
 
   constructor(options: ApiBrainOptions = {}) {
     super();
     this.provider = options.provider ?? createOpenAiCompatibleProvider({ ...(options.model ? { model: options.model } : {}) });
+  }
+
+  /**
+   * Supplies the read-only workspace surface.
+   *
+   * Must be attached before `capabilities()`: whether this Brain can inspect
+   * the workspace — and therefore whether independent review is possible —
+   * depends entirely on it.
+   */
+  attachDataPlane(dataPlane: ReadOnlyDataPlane): void {
+    this.dataPlane = dataPlane;
+  }
+
+  private get canInspect(): boolean {
+    return this.dataPlane !== null && this.provider.supportsTools;
   }
 
   metadata(): AdapterMetadata {
@@ -69,6 +89,7 @@ export class ApiBrain extends BaseBrainAdapter {
   }
 
   async buildCapabilities(): Promise<CapabilityManifest> {
+    const inspect = this.canInspect;
     const base = withCapabilities(emptyManifest("http"), [
       "session.create",
       "session.attach",
@@ -80,19 +101,32 @@ export class ApiBrain extends BaseBrainAdapter {
       "review.perform",
       "structuredOutput",
       "supportsHeadless",
+      ...(inspect ? (["workspace.read"] as const) : []),
     ]);
     return {
       ...base,
-      limitations: [
-        "No built-in workspace access: pair a bridge and expose the MCP data plane, otherwise reviews are not independent.",
-        "Cost and latency depend entirely on the configured provider.",
-      ],
+      limitations: inspect
+        ? [
+            "Workspace access is limited to the read-only data plane tools.",
+            "Cost and latency depend entirely on the configured provider.",
+          ]
+        : [
+            "No workspace access: attach a data plane and use a provider with tool calling, otherwise reviews are not independent.",
+            ...(this.provider.supportsTools
+              ? []
+              : [`Provider '${this.provider.id}' does not expose tool calling in this implementation.`]),
+            "Cost and latency depend entirely on the configured provider.",
+          ],
       auth: {
         required: true,
         authenticated: Boolean(process.env[this.provider.credentialEnv]),
         method: `${this.provider.credentialEnv} environment variable`,
       },
-      facts: { provider: this.provider.id, model: this.provider.defaultModel },
+      facts: {
+        provider: this.provider.id,
+        model: this.provider.defaultModel,
+        dataPlane: inspect ? "attached" : "none",
+      },
     };
   }
 
@@ -130,13 +164,27 @@ export class ApiBrain extends BaseBrainAdapter {
     const state = this.stateFor(session);
     const systemPrompt = [
       "You are the BRAIN in an Agent2LLM collaboration. You do not execute changes.",
-      "Reply with exactly one [A2L] control block and nothing else.",
+      ...(this.canInspect
+        ? [
+            "Inspect the workspace with the provided read-only tools before deciding.",
+            "Never trust the Harness's own report of what changed; verify it yourself.",
+          ]
+        : ["You have no workspace access, so say so rather than guessing at file contents."]),
+      "Finish with exactly one [A2L] control block and nothing else.",
     ].join("\n");
+
     for (let attempt = 0; attempt < 3; attempt++) {
       const response = await state.provider.complete({
         model: state.provider.defaultModel,
         messages: [{ role: "system", content: systemPrompt }, ...state.history],
+        ...(this.canInspect && this.dataPlane ? { tools: this.dataPlane.tools } : {}),
       });
+
+      if (response.toolCalls && response.toolCalls.length > 0 && this.dataPlane) {
+        await this.runToolCalls(state, response.toolCalls);
+        continue;
+      }
+
       const parsed = parseControlBlock(response.text);
       if (parsed.ok) {
         state.history.push({ role: "assistant", content: response.text });
@@ -150,14 +198,53 @@ export class ApiBrain extends BaseBrainAdapter {
     throw new Error("API Brain failed to produce a valid A2L control message after 3 attempts.");
   }
 
+  /**
+   * Executes requested read-only tools and feeds results back.
+   *
+   * Unknown or failing tools come back as an error string rather than an
+   * exception, so a bad model guess cannot abort the run.
+   */
+  private async runToolCalls(
+    state: ApiSessionState,
+    calls: readonly { id: string; name: string; arguments: string }[]
+  ): Promise<void> {
+    const dataPlane = this.dataPlane;
+    if (!dataPlane) return;
+    state.history.push({ role: "assistant", content: `[tool request] ${calls.map((c) => c.name).join(", ")}` });
+    const results: string[] = [];
+    for (const call of calls.slice(0, MAX_TOOL_ROUNDS)) {
+      let args: Record<string, unknown> = {};
+      try {
+        const parsed: unknown = JSON.parse(call.arguments || "{}");
+        if (typeof parsed === "object" && parsed !== null) args = parsed as Record<string, unknown>;
+      } catch {
+        results.push(`${call.name}: invalid arguments JSON`);
+        continue;
+      }
+      const result = await dataPlane.call(call.name, args);
+      results.push(`${call.name}: ${result.text}`);
+    }
+    state.history.push({ role: "user", content: results.join("\n\n") });
+  }
+
   async verifyWorkspace(
     _session: BrainSession,
     workspace: { workspaceId: string; root: string }
   ): Promise<VerificationResult> {
+    if (!this.canInspect || !this.dataPlane) {
+      return {
+        verified: false,
+        method: "none",
+        message: `The API Brain has no workspace access. Attach a read-only data plane for workspace ${workspace.workspaceId} to enable independent review.`,
+      };
+    }
+    const probe = await this.dataPlane.call("workspace_info", {});
     return {
-      verified: false,
-      method: "none",
-      message: `The API Brain has no direct workspace access. Pair the Agent2LLM bridge for workspace ${workspace.workspaceId} to enable independent review.`,
+      verified: probe.ok,
+      method: "data-plane",
+      message: probe.ok
+        ? `API Brain can read workspace ${workspace.workspaceId} through ${this.dataPlane.tools.length} read-only tools.`
+        : `Workspace probe failed: ${probe.text.slice(0, 300)}`,
     };
   }
 

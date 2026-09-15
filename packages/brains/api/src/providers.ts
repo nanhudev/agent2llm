@@ -10,17 +10,35 @@ export interface ChatTurn {
   content: string;
 }
 
+/** Tool definition in the shape providers understand (mirrors the data plane). */
+export interface ToolSpec {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  /** Raw JSON string as produced by the model. */
+  arguments: string;
+}
+
 export interface ChatCompletionRequest {
   model: string;
   messages: ChatTurn[];
   temperature?: number;
   maxTokens?: number;
+  /** Offered only when the provider can act on tool calls. */
+  tools?: readonly ToolSpec[];
 }
 
 export interface ChatCompletionResponse {
   text: string;
   model: string;
   usage?: { promptTokens?: number; completionTokens?: number };
+  /** Present when the model asked for tools instead of answering. */
+  toolCalls?: ToolCall[];
 }
 
 export interface BrainProvider {
@@ -30,6 +48,8 @@ export interface BrainProvider {
   /** Env var holding the credential. Never stored in the repo or workspace. */
   credentialEnv: string;
   baseUrl: string;
+  /** False means the Brain cannot inspect the workspace itself. */
+  supportsTools: boolean;
   complete(request: ChatCompletionRequest): Promise<ChatCompletionResponse>;
 }
 
@@ -84,6 +104,7 @@ export function createOpenAiCompatibleProvider(config: ProviderConfig = {}): Bra
     defaultModel: config.model ?? "gpt-4o-mini",
     credentialEnv: "OPENAI_API_KEY",
     baseUrl,
+    supportsTools: true,
     async complete(request) {
       const apiKey = config.apiKey ?? process.env.OPENAI_API_KEY;
       if (!apiKey) throw new Error("OPENAI_API_KEY is not set.");
@@ -94,13 +115,34 @@ export function createOpenAiCompatibleProvider(config: ProviderConfig = {}): Bra
           messages: request.messages,
           temperature: request.temperature ?? 0.2,
           ...(request.maxTokens ? { max_tokens: request.maxTokens } : {}),
+          ...(request.tools && request.tools.length > 0
+            ? {
+                tools: request.tools.map((tool) => ({
+                  type: "function",
+                  function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
+                })),
+              }
+            : {}),
         },
         {
           authorization: `Bearer ${apiKey}`,
           ...(config.headers ?? {}),
         }
       );
-      const text = readPath(body, ["choices", "0", "message", "content"]);
+      const message = readPath(body, ["choices", "0", "message"]);
+      const rawCalls = readPath(body, ["choices", "0", "message", "tool_calls"]);
+      const toolCalls = Array.isArray(rawCalls)
+        ? rawCalls.flatMap((call) => {
+            const fn = readPath(call, ["function"]);
+            const name = typeof fn === "object" && fn ? readPath(fn, ["name"]) : undefined;
+            const args = typeof fn === "object" && fn ? readPath(fn, ["arguments"]) : undefined;
+            const id = readPath(call, ["id"]);
+            return typeof name === "string"
+              ? [{ id: String(id ?? name), name, arguments: typeof args === "string" ? args : "{}" }]
+              : [];
+          })
+        : [];
+      const text = typeof message === "object" && message ? readPath(message, ["content"]) : undefined;
       return {
         text: typeof text === "string" ? text : "",
         model: String(readPath(body, ["model"]) ?? request.model),
@@ -108,6 +150,7 @@ export function createOpenAiCompatibleProvider(config: ProviderConfig = {}): Bra
           promptTokens: Number(readPath(body, ["usage", "prompt_tokens"]) ?? 0) || undefined,
           completionTokens: Number(readPath(body, ["usage", "completion_tokens"]) ?? 0) || undefined,
         },
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
       };
     },
   };
@@ -122,6 +165,8 @@ export function createAnthropicProvider(config: ProviderConfig = {}): BrainProvi
     defaultModel: config.model ?? "claude-sonnet-4-5",
     credentialEnv: "ANTHROPIC_API_KEY",
     baseUrl,
+    // Declared honestly: this implementation does not wire Anthropic tool_use.
+    supportsTools: false,
     async complete(request) {
       const apiKey = config.apiKey ?? process.env.ANTHROPIC_API_KEY;
       if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set.");
