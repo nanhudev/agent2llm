@@ -288,10 +288,28 @@ MCP、执行记录、隧道与守护进程生命周期、脱敏日志。详见
 ```bash
 npm run build       # tsc -b
 npm run typecheck
-npm test            # 协议 / 契约 / 安全 / 编排，共 67 项
+npm test            # 协议 / 契约 / 安全 / 编排 / 浏览器探针，共 70 项
 npm run lint
 npm run verify
 ```
+
+### Web Brain 的浏览器（可选）
+
+ChatGPT 与 Claude 的 Web Brain 通过 Playwright 加浏览器引擎驱动官方界面。两者都是可选的：
+不装的话 Web Brain 会退回到手动传输，依然能用。
+
+```bash
+npm i -D playwright
+npx playwright install chromium
+```
+
+Chromium 约 310 MB。若不想占用系统盘，可以在安装**之前**把
+`PLAYWRIGHT_BROWSERS_PATH` 指向别的盘；或者装在默认位置、再在默认位置放一个
+目录联接指过去——后者运行时无需任何环境变量。
+
+浏览器必须以**有头模式**运行：Cloudflare 会对无头 Chromium 返回 403，而登录、
+验证码与两步验证始终由真人在官方界面完成，从不绕过。`chatgpt.com` 能否连通
+取决于你自己的网络环境。
 
 ### 启用 CI
 

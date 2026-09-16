@@ -293,10 +293,30 @@ migration.
 ```bash
 npm run build       # tsc -b
 npm run typecheck
-npm test            # protocol, contract, security, orchestrator — 67 assertions
+npm test            # protocol, contract, security, orchestrator, browser probe — 70 assertions
 npm run lint
 npm run verify
 ```
+
+### Web Brain browser (optional)
+
+The ChatGPT and Claude Web Brains drive the official UI through Playwright plus a
+browser engine. Both are optional: without them a Web Brain falls back to the
+manual transport and still works.
+
+```bash
+npm i -D playwright
+npx playwright install chromium
+```
+
+Chromium is around 310 MB. To keep it off the system drive, set
+`PLAYWRIGHT_BROWSERS_PATH` to another disk *before* installing — or install to
+the default location and put a directory junction there pointing at the other
+disk, which needs no environment variable at run time.
+
+The browser must run **headed**. Cloudflare answers headless Chromium with a 403,
+and login, CAPTCHA and 2FA are always completed by the human in the real UI —
+never automated around. Reachability of `chatgpt.com` is your own network's job.
 
 ### Enabling CI
 
