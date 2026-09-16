@@ -22,6 +22,19 @@ Flow:
 4. `verifyWorkspace` — confirm the Brain can actually reach the read-only MCP
    connector before the run starts.
 
+## Transport
+
+Reached through `BrowserTransport`, in preference order:
+
+1. `cdp` — attach to a Chromium window that is already open, given
+   `--endpoint` / `AGENT2LLM_ATTACH_ENDPOINT` or a window listening on a default
+   port. No second login, and the conversation stays visible.
+2. `playwright` — launch a browser with a private profile.
+3. `manual` — outbox and inbox files, carried by a person.
+
+See [ADR-007](../adr/ADR-007-attach-before-launch.md) and
+[Browser transport](../architecture/browser-transport.md).
+
 ## Boot prompt
 
 `packages/brains/chatgpt-web/src/boot-prompt.ts` tells the Brain, in effect:

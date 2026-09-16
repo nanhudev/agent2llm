@@ -4,6 +4,47 @@ All notable changes are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Window attach transport.** Web Brains can now drive a Chromium window that is
+  already open — a desktop build, or the user's own Edge/Chrome — over the
+  DevTools protocol, and it is tried before launching a browser. `--endpoint`
+  (or `AGENT2LLM_ATTACH_ENDPOINT`) selects it explicitly. `cdp` joins the
+  transport enum in the capability manifest.
+- Desktop application sensing (`packages/transports/src/desktop.ts`): reports an
+  executable on disk, whether a process is running, and a DevTools endpoint only
+  when one actually answered.
+- `agent2llm doctor` reports `Window attach` and `ChatGPT desktop` separately
+  from browser automation, in that order.
+- `tests/cdp-attach.test.mjs` drives a real Chromium over CDP and asserts that
+  detaching does not close the window it attached to.
+
+### Fixed
+
+- **`waitForReply()` could block until its timeout.** It took its baseline when
+  the wait began, so a reply already on screen — exactly what a fast or local
+  Brain produces — read as "nothing has changed yet". The baseline is now
+  captured when the message is submitted.
+- **`open()` silently skipped navigation to hostless URLs.** `about:blank`,
+  `data:` and `file:` have an empty host, so a blank tab looked like it was
+  already on any hostless target.
+- **Probe results raced under `detect`.** Concurrent adapters probing the same
+  ports on a tight timeout disagreed about the same window. Answers are now
+  cached briefly, so one probe serves them all.
+- **`probeBrowserModule()` always answered `installed:false`.** It called
+  `require.resolve` from an ESM module, where no `require` binding exists; the
+  ReferenceError was swallowed by its own `try`/`catch`. Every Web Brain
+  silently degraded to the manual transport even with Playwright installed.
+
+### Changed
+
+- README rewritten around transport selection order, with an explicit list of
+  what has not been verified.
+- `docs/architecture/browser-transport.md` corrected — it documented a
+  `NoBrowserTransport` that never existed in the code.
+
 ## [0.1.0] — 2026-09-16
 
 ### Added

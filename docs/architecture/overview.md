@@ -66,7 +66,7 @@ Agent2LLM Core
 | `packages/bridge` | local broker runtime + HTTP surface |
 | `packages/process` | daemon lifecycle: start, reuse, health, stop, stale pid cleanup |
 | `packages/tunnel` | `TunnelProvider` abstraction + Cloudflare implementation |
-| `packages/transports` | `BrowserTransport`, subprocess transport, manual inbox transport |
+| `packages/transports` | `BrowserTransport` (CDP attach / Playwright launch / manual inbox), endpoint and desktop probes, subprocess transport |
 | `packages/session` | `CollaborationSession` model, store, resume planning, HANDOFF builder |
 | `packages/orchestrator` | state machine, control channel, run loop, brain session lifecycle, persistence |
 | `packages/detect` | static detection of installed agents (PATH, common locations, app metadata) |

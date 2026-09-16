@@ -13,6 +13,14 @@ Flow mirrors `chatgpt-web`: official-UI setup, one-action-at-a-time user prompts
 for login / CAPTCHA / 2FA, boot prompt, then A2L control blocks over
 `BrowserTransport`.
 
+## Transport
+
+Reached through the shared `BrowserTransport`, in preference order: `cdp` (attach
+to a window that is already open), `playwright` (launch one with a private
+profile), `manual` (hand the messages to a person). See
+[ADR-007](../adr/ADR-007-attach-before-launch.md) and
+[Browser transport](../architecture/browser-transport.md).
+
 ## Prohibited
 
 - Reverse-engineered Claude API.

@@ -5,135 +5,76 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 [![协议](https://img.shields.io/badge/protocol-a2l%2F1-blue.svg)](./docs/protocol/a2l-protocol.md)
 
-简体中文 · [English](./README.md)
+[English](./README.md) · 简体中文
 
-**最强模型负责思考，你顺手的 Agent 负责干活。**
-
-用 ChatGPT 或 Claude 当推理大脑，驱动 DeepSeek Harness、WorkBuddy、Codex、
-Cursor、Claude Code 等执行 Agent。
+用 ChatGPT 或 Claude 当大脑，驱动 DeepSeek Harness、WorkBuddy、Codex、Cursor、
+Claude Code、OpenCode 干活。
 
 ```text
-N 个 Brain Adapter  ×  M 个 Harness Adapter  =  N × M 自由组合
+N 个 Brain 适配器  ×  M 个 Harness 适配器  =  N × M 种组合
 ```
 
----
+## 为什么做这个
 
-## 它不是什么
+[XiaoDuoYa/codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt)
+证明了一件事：聊天框可以当控制平面。ChatGPT 出计划，Codex 执行，两边之间只跑一小段
+文本协议。那是个好活，但它焊死在 Codex 上——一个大脑配一个执行器。
 
-| 不是 | 而是 |
-| --- | --- |
-| OpenAI 兼容网关 | 本地协作运行时 |
-| API Key 聚合器 | 角色 / 能力协议（`a2l/1`） |
-| ChatGPT / Claude 反向代理 | 官方界面自动化 + 用户本人登录 |
-| 又一个 coding agent | 连接「大脑」与你现有 Agent 的一层 |
+Agent2LLM 留下思路，去掉焊接。Brain 和 Harness 分列适配器边界两侧，任何一个大脑都能
+驱动任何一个执行器：
 
-核心只有一句话：
+- Brain：`chatgpt-web`、`claude-web`、`api`、`mock-brain`
+- Harness：`dsh`、`workbuddy`、`codex`、`cursor`、`claude-code`、`opencode`、
+  `mock-harness`
 
-```text
-Brain 思考。Hands 执行。Core 治理。
-```
+新增一边不影响另一边。整个设计就这一句话。
 
----
+## 它是怎么跑的
 
-## 唯一真正重要的设计
-
-> Brain 审查的是**真实工作区**，而不是 Harness 的自我介绍。
-
-Harness 说「测试通过了」那叫声明；`git_diff` 才叫证据。所以：
-
-- **控制面** —— 极小的 A2L 消息：状态、id、计数、意图。预算 `< 4 KB`，
-  Web 大脑目标 `< 1 KB`。
-- **数据面** —— 只读 MCP 服务。Brain 按需拉取。
-
----
-
-## 架构
+两条平面，刻意分开。
 
 ```text
-               Brain 层
-
-       ChatGPT    Claude     API      Mock
-          │         │         │        │
-          └────┬────┴────┬────┘        │
-               │         │             │
-          BrainAdapter（统一契约）
-               │
-      ┌────────┴─────────────────────────┐
-      │        A2L 协议 / Core           │
-      │  状态机 · 权限 · 兼容性 · 会话    │
-      └────────┬─────────────────────────┘
-               │
-        HarnessAdapter（统一契约）
-               │
-   ┌───────────┼────────────┬───────────┐
-  DSH      WorkBuddy     Codex      Cursor
-   │           │            │           │
-Claude Code  OpenCode     Mock       你的
-```
-
-两个平面：
-
-```text
-Brain
-  │ 控制消息（很小）
+Brain                    控制平面：状态、id、计数、意图。
+  │                      预算 < 4 KB，走网页 UI 时 < 1 KB。
+  │ control（很小）
   ▼
 Agent2LLM Core
   │
-  ├── 只读 MCP ──> 工作区
+  ├── 只读 MCP ──> 工作区      Brain 自己去取需要的
   │
-  └── 执行请求 ──> Harness ──> 修改工作区
+  └── ExecutionRequest ──> Harness ──> 修改工作区
 ```
 
----
+分开只为一条理由：**Brain 审的是真实工作区，不是 Harness 的转述。** Harness 说"测试
+过了"是主张，`git_diff` 才是证据。所以 Brain 拿到的是真实工作区的只读视图。
+
+面向 Brain 的 MCP 服务里没有 `write_file`，没有 `shell`，没有 `git_commit`，没有
+`install_package`。这些工具根本不存在。Brain 负责判断，Harness 负责动手。
 
 ## 安装
 
-源码安装（尚未发布 npm 包）：
+还没发 npm 包，从源码装：
 
 ```bash
-git clone https://github.com/<you>/agent2llm.git
+git clone https://github.com/nanhudev/agent2llm.git
 cd agent2llm
 npm install
 npm run build
 node apps/cli/dist/index.js version
 ```
 
-要求 **Node.js >= 20**。
-
----
+需要 **Node.js >= 20**。
 
 ## 快速开始
 
 ```bash
-agent2llm                 # 交互式启动
-agent2llm detect          # 本机装了哪些 Agent
-agent2llm doctor          # 健康检查 + 修复建议
-agent2llm adapters        # 实现 / 检测到 / 已验证，如实呈现
+agent2llm                 # 交互式启动器
+agent2llm detect          # 这台机器上装了什么
+agent2llm doctor          # 体检，带修复建议
+agent2llm adapters        # 每个适配器的 implemented / detected / verified
 ```
 
-交互式启动：
-
-```text
-Agent2LLM
-
-Your best model thinks.
-Your favorite agent builds.
-
-Brains
-✓ ChatGPT
-○ Claude
-○ API Provider
-
-Harnesses
-✓ DeepSeek Harness
-✓ WorkBuddy
-✓ Codex
-○ Cursor
-○ Claude Code
-○ OpenCode
-```
-
-非交互式：
+非交互：
 
 ```bash
 agent2llm run \
@@ -144,44 +85,72 @@ agent2llm run \
   --goal "实现暗色模式"
 ```
 
-只验证组合是否可行、不接触任何外部产品：
+不碰任何产品，只验证配对是否成立：
 
 ```bash
 agent2llm run --brain chatgpt-web --harness workbuddy --dry-run
 ```
 
----
+## 让它驱动一个你已经开着的窗口
 
-## 一次协作长什么样
+ChatGPT 和 Claude 这两个 Web Brain 需要一个浏览器。这一环最容易搞错，所以把三种方式
+和优先级写清楚。
 
-```text
-$ agent2llm run --brain chatgpt-web --harness dsh --goal "实现登录鉴权"
+| 顺序 | 模式 | 实际发生什么 | 代价 |
+| --- | --- | --- | --- |
+| 1 | `cdp` | 接管一个已经开着的窗口 | 没有——你本来就登录着 |
+| 2 | `playwright` | 自己启动一个带独立 profile 的浏览器 | 要重新登录；新起的 Chromium 正是反自动化检测盯的东西 |
+| 3 | `manual` | Agent2LLM 把消息写到文件，你复制粘贴 | 慢，但永远可用，零依赖 |
 
-启动 ChatGPT × DeepSeek Harness
+优先接管的原因很实在：更便宜也更稳。会话活在一个你能看见的窗口里，跨 CLI 调用还在，
+不用登两次。
 
-Brain      正在检查工作区...
-Brain      计划已就绪（4 个动作）
-Harness    执行第 1 轮...
-Harness    改动 7 个文件，18 个测试通过
-Brain      正在审查真实 diff...
-Brain      需要返工
-Harness    执行第 2 轮...
-Brain      复查...
-完成。
+**这不是桌面版专属功能。** 这条 transport 说的是 DevTools 协议，任何暴露了调试端口的
+Chromium 窗口都能接管——桌面版可以，你自己的 Edge/Chrome 也可以。没有 per-app 适配器
+要维护。
+
+带调试端口启动一个窗口。以 Edge 为例（本项目的实测对象就是它）：
+
+```bash
+msedge --remote-debugging-port=9222 --user-data-dir=%LOCALAPPDATA%\a2l-window
 ```
 
-用户默认看不到 OAuth scope、PKCE verifier、localhost 端口和原始协议包。
-想看就用 `--verbose` / `--debug` / `--json`。
+确认被识别，然后运行：
 
----
+```bash
+agent2llm detect                       # 'Window attach' 应显示 PASS
+agent2llm run --brain chatgpt-web --harness workbuddy \
+  --goal "给 README 加一个徽章" \
+  --endpoint http://127.0.0.1:9222
+```
+
+`--endpoint` 是 `AGENT2LLM_ATTACH_ENDPOINT` 的快捷写法，两个都不给就扫三个默认端口。
+
+只有 `/json/version` 应答并且报出引擎名，才会被当成可接管。端口开着不算证据——随便什么
+进程都能占着端口，靠猜会把"没有窗口"变成后面一个莫名其妙的协议错误。断开只结束我们的
+会话，不关窗口，`tests/cdp-attach.test.mjs` 里有这条断言。
+
+### 关于桌面版
+
+Electron 或 WebView2 外壳应该和任何 Chromium 外壳一样接受 `--remote-debugging-port`，
+那样它就走上面 Edge 的同一条路径。但某个具体版本允许不允许这个参数，是逐版本的事，
+读多少文档都没用，只有启起来看一眼才知道。
+
+```bash
+# 带调试端口把它启动起来，然后：
+agent2llm detect
+```
+
+通了，`detect` 和 `doctor` 会告诉你；没通，它们也会如实说。在一台没装桌面版的机器上，
+这个项目能诚实给出的结论就到这里——见[目前缺什么](#目前缺什么)。
 
 ## 命令
 
 ```text
-agent2llm setup                      连接 Brain（官方界面，用户本人登录）
+agent2llm setup                      连接 Brain（官方 UI，人工登录）
 agent2llm run                        开始一次协作
-agent2llm detect                     检测本机 Agent
-agent2llm doctor                     健康检查 + 修复
+agent2llm detect                     探测本机装了哪些 agent
+agent2llm doctor                     体检 + 修复建议
 agent2llm adapters | brains | harnesses
 agent2llm session list|show|resume|stop
 agent2llm workspace list|add|remove
@@ -191,132 +160,124 @@ agent2llm config
 agent2llm version
 ```
 
-`detect`、`doctor`、`adapters`、`session` 等都支持 `--json`，方便其他 Agent
-机器读取。
+`detect`、`doctor`、`adapters`、`session` 等命令都支持 `--json`，方便别的 agent 消费。
 
----
+## 适配器状态
 
-## 支持矩阵（如实版）
+取自开发机上的 `agent2llm adapters`。口径：**implemented** = 代码写完且契约测试全绿 ·
+**detected** = 在这台机器上找到了 · **verified** = 真的跑通过一次端到端。
 
-开发机上 `agent2llm adapters` 的实际输出：
-
-| Adapter | 角色 | 状态 | 真实端到端 |
+| 适配器 | 角色 | 状态 | 端到端 |
 | --- | --- | --- | --- |
-| `mock-brain` | brain | verified | 已跑通 |
-| `chatgpt-web` | brain | implemented | **未验证** — 需登录 |
-| `claude-web` | brain | implemented | **未验证** — 需登录 |
-| `api` | brain | implemented | **未验证** — 需 Key |
-| `dsh` | harness | **已检测**（`0.1.2-rc.1`） | 未跑（会消耗额度） |
-| `workbuddy` | harness | **已检测**（`codebuddy` 2.137.1） | 未跑 |
-| `codex` | harness | implemented | **未验证** — 本机未安装 |
-| `cursor` | harness | implemented | **未验证** — 本机未安装 |
-| `claude-code` | harness | implemented | **未验证** — 本机未安装 |
-| `opencode` | harness | implemented | **未验证** — 本机未安装 |
-| `mock-harness` | harness | verified | 已跑通 |
+| `mock-brain` | brain | verified | 是 |
+| `chatgpt-web` | brain | implemented | 未跑——需要登录 |
+| `claude-web` | brain | implemented | 未跑——需要登录 |
+| `api` | brain | implemented | 未跑——需要密钥 |
+| `workbuddy` | harness | detected（`codebuddy` 2.137.1） | 未跑 |
+| `dsh` | harness | detected（`dsh` 0.1.2-rc.1） | 未跑 |
+| `codex` | harness | implemented | 本机未安装 |
+| `cursor` | harness | implemented | 本机未安装 |
+| `claude-code` | harness | implemented | 本机未安装 |
+| `opencode` | harness | implemented | 本机未安装 |
+| `mock-harness` | harness | verified | 是 |
 
-API Brain 是唯一没有自带 MCP 客户端的 Brain，因此它通过进程内的只读工具面 +
-provider 的 tool calling 来读取工作区。没有 data plane 时它会如实声明「无工作区
-访问」，绝不假装 —— 见 [`docs/adapters/api.md`](docs/adapters/api.md)。
+API Brain 是唯一没有自带 MCP 客户端的大脑，所以它拿到的是进程内的只读工具面，通过
+provider 的 tool calling 去调。没有数据平面时它直接声明自己没有工作区访问权限，而不是
+假装有——详见 [`docs/adapters/api.md`](docs/adapters/api.md)。
 
-图例：**implemented** = 代码完整且契约测试通过 · **detected** = 本机已找到 ·
-**verified** = 端到端实测通过。
+## 目前缺什么
 
-README 不会把没验证过的东西写成「完全支持」。
+列在这儿是因为它们是真的，不是因为它们好看。
 
----
+- 只有 `mock-brain` × `mock-harness` 这一对跑通过端到端。其余是契约测试 + dry-run。
+- 没有对真实的 ChatGPT / Claude 账号验证过任何东西。浏览器链路只验证到"页面加载成功"
+  这一步，登录、MCP 配对、完整一轮对话都没验证。
+- 桌面版没试过，因为本机没装。
+- Web Brain 是抓 UI 的，站方改版选择器就会失效。每个 Brain 的选择器集中在一个文件里，
+  这是故意的。
+- `chatgpt.com` 必须可达。Cloudflare 对 headless Chromium 回 403；transport 跑有头
+  模式，登录、验证码、两步验证一律由人在官方界面完成，绝不做自动化绕过。
+- CI 默认关闭——见[启用 CI](#启用-ci)。
 
 ## 安全模型
 
-- **Brain 不能写。** 不存在 `write_file`、`shell`、`git_commit`、
-  `install_package` —— Brain 侧的服务根本没有这些工具。
-- **文件内容不能授予权限。** 权限来自代码和配置，不来自模型文本。
-  提示词注入最多误导判断，拿不到 shell。
-- **规范化路径 containment。** `../`、绝对路径、符号链接、目录符号链接、
-  junction、大小写绕过，全部 fail closed。
-- **敏感文件默认拒绝。** `.env`、私钥、SSH/云凭证、token 文件、认证数据库、
-  浏览器 profile。`.env.example` 可读。
-- **不透明工作区 id。** Brain 只看到 `a2lw_…`，看不到文件系统路径。
-- **OAuth 2.1 + PKCE S256 + DCR**，轮换 refresh token、哈希存储、一次性配对码
-  （TTL + 次数限制 + 限流）。
-- **日志脱敏。** token、配对码、Key、cookie、Authorization 头。
-- **不反代、不偷 cookie、不拦截私有 API。** 验证码、2FA、登录一律由你本人
-  在官方界面完成。
+- **Brain 不能写。** 面向 Brain 的工具面里没有 `write_file`、`shell`、`git_commit`、
+  `install_package`。
+- **文件内容不能授权。** 权限来自代码和配置，永不来自模型文本。提示注入能误导判断，
+  但发不出一个 shell。
+- **规范路径收敛。** `../`、绝对路径、符号链接、目录符号链接、junction、大小写花招
+  一律 fail closed。
+- **敏感文件拒绝访问。** `.env`、密钥、SSH 与云凭据、token 文件、认证数据库、浏览器
+  profile。`.env.example` 保持可读。
+- **工作区 id 不透明。** Brain 看到的是 `a2lw_…`，永远不是文件系统路径。
+- **OAuth 2.1 + PKCE S256 + DCR**，刷新令牌轮转，静态哈希存储，一次性配对码带 TTL
+  和限流。
+- **日志脱敏。** token、配对码、密钥、cookie、认证头。
+- **不做反向代理、不窃取 cookie、不拦截私有 API。** 登录、验证码、两步验证都由你在
+  官方界面完成。
 
-完整模型见 [`docs/security/threat-model.md`](docs/security/threat-model.md)。
+完整模型：[`docs/security/threat-model.md`](docs/security/threat-model.md)。
 
----
+## 自己写一个 Harness
 
-## 加一个自己的 Harness
-
-只写一个类：
+一个类，一份 manifest：
 
 ```ts
 export class MyHarness extends HarnessAdapterBase {
-  metadata() { return { id: "my-harness", name: "My Harness", version: "0.1.0", role: "harness" }; }
-  async capabilities() { /* 只声明真实存在的能力 */ }
-  async execute(session, task) { /* 真的去执行 */ }
+  metadata() {
+    return { id: "my-harness", name: "My Harness", version: "0.1.0", role: "harness" };
+  }
+  async capabilities() { /* 真实存在什么就声明什么 */ }
+  async execute(session, task) { /* 真的把它跑起来 */ }
 }
 ```
 
-以 `@agent2llm/harness-my-harness` 发布，manifest 里带上 `apiVersion`。然后：
-
-```text
-ChatGPT   × My Harness
-Claude    × My Harness
-API Brain × My Harness
-```
-
-全部自动成立，**不需要改 Core 一行代码**。这就是本项目的成功标准。
-
----
+以 `@agent2llm/harness-my-harness` 发包，manifest 里带上 `apiVersion`，它就能和上面
+所有 Brain 组合，Core 一行不用改。
 
 ## 上游归属
 
-Agent2LLM 大量改编了
-[`XiaoDuoYa/codex-with-chatgpt`](https://github.com/XiaoDuoYa/codex-with-chatgpt)
-（MIT）中已成熟且安全关键的代码：OAuth/PKC−/配对、工作区 containment、只读
-MCP、执行记录、隧道与守护进程生命周期、脱敏日志。详见
+Agent2LLM 改编了
+[`XiaoDuoYa/codex-with-chatgpt`](https://github.com/XiaoDuoYa/codex-with-chatgpt)（MIT）
+中大量安全关键代码：OAuth/PKCE/配对、工作区收敛、只读 MCP、执行记录、隧道与守护进程
+生命周期、脱敏日志。见
 [`docs/C2C_REUSE_MAP.md`](docs/C2C_REUSE_MAP.md) 与
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
-协议是 **A2L**（`a2l/1`）而非 C2C；保留了状态映射表便于迁移。
-
----
+本项目的协议叫 A2L（`a2l/1`），不是 C2C。为方便迁移保留了一份状态映射。
 
 ## 开发
 
 ```bash
 npm run build       # tsc -b
 npm run typecheck
-npm test            # 协议 / 契约 / 安全 / 编排 / 浏览器探针，共 70 项
+npm test            # 协议、契约、安全、编排、transport
 npm run lint
 npm run verify
 ```
 
-### Web Brain 的浏览器（可选）
+测试就是普通 Node 脚本，不需要装测试框架。每个文件独立进程跑，用隔离的
+`AGENT2LLM_STATE_DIR`。
 
-ChatGPT 与 Claude 的 Web Brain 通过 Playwright 加浏览器引擎驱动官方界面。两者都是可选的：
-不装的话 Web Brain 会退回到手动传输，依然能用。
+### 浏览器引擎（可选）
+
+Web Brain 通过 Playwright 驱动官方 UI。它是可选的：不装，Web Brain 照样能走 `cdp`
+或 manual 模式。
 
 ```bash
 npm i -D playwright
 npx playwright install chromium
 ```
 
-Chromium 约 310 MB。若不想占用系统盘，可以在安装**之前**把
-`PLAYWRIGHT_BROWSERS_PATH` 指向别的盘；或者装在默认位置、再在默认位置放一个
-目录联接指过去——后者运行时无需任何环境变量。
-
-浏览器必须以**有头模式**运行：Cloudflare 会对无头 Chromium 返回 403，而登录、
-验证码与两步验证始终由真人在官方界面完成，从不绕过。`chatgpt.com` 能否连通
-取决于你自己的网络环境。
+Chromium 约 310 MB。想不占系统盘，要么装之前设 `PLAYWRIGHT_BROWSERS_PATH`，要么装到
+默认位置再放一个目录联接（junction）指向别的盘——联接方案运行时不需要任何环境变量。
 
 ### 启用 CI
 
-CI 配置随仓库分发在 [`.github/ci/github-actions.yml`](.github/ci/github-actions.yml)
-（Linux / Windows / macOS × Node 20 / 22），而没有放在 `.github/workflows/` 下——
-因为 GitHub 把该目录视为受保护路径，凭据不带 `workflow` scope 时，任何触及它的 push
-都会被拒绝。启用方式：
+workflow 放在
+[`.github/ci/github-actions.yml`](.github/ci/github-actions.yml)（Linux / Windows /
+macOS × Node 20 / 22），而不是 `.github/workflows/` 下面。原因是 GitHub 会拒绝任何
+触碰该目录的推送，除非凭据带 `workflow` scope，而推送是原子的：一个文件被拒，整批都被拒。
 
 ```bash
 node scripts/enable-ci.mjs    # 复制到 .github/workflows/ci.yml
@@ -324,23 +285,21 @@ git add .github/workflows/ci.yml
 git commit -m "ci: enable GitHub Actions workflow"
 ```
 
-最后那次 push 需要同时具备 `repo` 和 `workflow` 两个 scope 的 token，
-在 <https://github.com/settings/tokens> 生成。
+那一次推送需要一个同时具备 `repo` 和 `workflow` scope 的 token。
 
 ## 文档
 
 - [架构总览](docs/architecture/overview.md) ·
-  [Adapter 架构](docs/architecture/adapters.md) ·
-  [浏览器传输](docs/architecture/browser-transport.md) ·
-  [工作区 Broker](docs/architecture/workspace-broker.md)
+  [适配器](docs/architecture/adapters.md) ·
+  [浏览器 transport](docs/architecture/browser-transport.md) ·
+  [工作区中介](docs/architecture/workspace-broker.md)
 - [A2L 协议](docs/protocol/a2l-protocol.md) ·
   [状态机](docs/protocol/state-machine.md)
 - [威胁模型](docs/security/threat-model.md) ·
   [工作区隔离](docs/security/workspace-isolation.md)
-- [工作流](docs/workflows/README.md) ·
-  [故障排查](docs/troubleshooting.md)
-- [ADR](docs/adr/) · [前置研究：C2C](docs/prior-art/C2C.md)
+- [工作流](docs/workflows/README.md) · [故障排查](docs/troubleshooting.md)
+- [ADR](docs/adr/) · [前作：C2C](docs/prior-art/C2C.md)
 
-## 许可证
+## 许可
 
-MIT —— 见 [LICENSE](LICENSE)。
+MIT——见 [LICENSE](LICENSE)。

@@ -7,92 +7,59 @@
 
 English · [简体中文](./README.zh-CN.md)
 
-**Your best model thinks. Your favorite agent builds.**
-
-Use ChatGPT or Claude as the reasoning brain behind DeepSeek Harness,
-WorkBuddy, Codex, Cursor, Claude Code and other coding agents.
+Use ChatGPT or Claude as the reasoning brain behind DeepSeek Harness, WorkBuddy,
+Codex, Cursor, Claude Code or OpenCode.
 
 ```text
 N Brain Adapters  ×  M Harness Adapters  =  N × M composability
 ```
 
----
+## Why this exists
 
-## Not an API proxy. Not a model gateway. Not another coding agent.
+[XiaoDuoYa/codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt)
+showed that a chat box can carry a control plane: ChatGPT plans, Codex executes,
+and a small text protocol moves between them. That work is good, and it is welded
+to Codex — one brain, one harness.
 
-| It is not | It is |
-| --- | --- |
-| An OpenAI-compatible gateway | A local collaboration runtime |
-| An API key aggregator | A role/capability protocol (`a2l/1`) |
-| A reverse proxy of ChatGPT or Claude | Official-UI automation with human login |
-| A new coding agent | A layer that connects a Brain to your existing agent |
+Agent2LLM keeps the idea and drops the welding. Brain and Harness sit on either
+side of an adapter boundary, so any brain can drive any harness:
 
-Agent2LLM separates **who thinks** from **who acts**:
+- Brains: `chatgpt-web`, `claude-web`, `api`, `mock-brain`
+- Harnesses: `dsh`, `workbuddy`, `codex`, `cursor`, `claude-code`, `opencode`,
+  `mock-harness`
 
-```text
-Brain thinks.  Hands act.  Core governs.
-```
+Adding one does not change the other. That is the whole design.
 
----
+## How it works
 
-## The one idea that matters
-
-> The Brain reviews the **real workspace**, not the Harness's description of it.
-
-A Harness saying "tests pass" is a claim. `git_diff` is evidence. So:
-
-- **Control plane** — tiny A2L messages: state, ids, counts, intent.
-  Budget `< 4 KB`, `< 1 KB` for web brains.
-- **Data plane** — a read-only MCP server. The Brain pulls what it needs.
-
----
-
-## Architecture
+Two planes, kept separate on purpose.
 
 ```text
-               Brain Layer
-
-       ChatGPT    Claude     API      Mock
-          │         │         │        │
-          └────┬────┴────┬────┘        │
-               │         │             │
-          BrainAdapter (uniform contract)
-               │
-      ┌────────┴─────────────────────────┐
-      │        A2L Protocol / Core       │
-      │  state machine · permissions     │
-      │  compatibility · sessions        │
-      └────────┬─────────────────────────┘
-               │
-        HarnessAdapter (uniform contract)
-               │
-   ┌───────────┼────────────┬───────────┐
-  DSH      WorkBuddy     Codex      Cursor
-   │           │            │           │
-Claude Code  OpenCode     Mock      (yours)
-```
-
-And the two planes:
-
-```text
-Brain
+Brain                    Control plane: state, ids, counts, intent.
+  │                      Budget < 4 KB, < 1 KB over a web UI.
   │ control (small)
   ▼
 Agent2LLM Core
   │
-  ├── read-only MCP ──> Workspace
+  ├── read-only MCP ──> Workspace      The Brain pulls what it needs.
   │
   └── ExecutionRequest ──> Harness ──> mutates Workspace
 ```
 
----
+The split exists for one reason: **the Brain reviews the workspace, not the
+Harness's summary of it.** A Harness saying "tests pass" is a claim. `git_diff`
+is evidence. So the Brain gets a read-only view of the real thing.
+
+The Brain-facing MCP server has no `write_file`, no `shell`, no `git_commit`,
+no `install_package`. Those tools do not exist in it. The Brain decides; the
+Harness acts.
 
 ## Install
 
-Source install (no npm package published yet):
+No npm package yet — install from source.
 
 ```bash
-git clone https://github.com/<you>/agent2llm.git
+git clone https://github.com/nanhudev/agent2llm.git
 cd agent2llm
 npm install
 npm run build
@@ -101,37 +68,13 @@ node apps/cli/dist/index.js version
 
 Requires **Node.js >= 20**.
 
----
-
 ## Quick start
 
 ```bash
 agent2llm                 # interactive launcher
 agent2llm detect          # what is installed on this machine
-agent2llm doctor          # health, with repairs
-agent2llm adapters        # implemented / detected / verified, in truthful terms
-```
-
-Interactive launcher:
-
-```text
-Agent2LLM
-
-Your best model thinks.
-Your favorite agent builds.
-
-Brains
-✓ ChatGPT
-○ Claude
-○ API Provider
-
-Harnesses
-✓ DeepSeek Harness
-✓ WorkBuddy
-✓ Codex
-○ Cursor
-○ Claude Code
-○ OpenCode
+agent2llm doctor          # health checks, with repairs
+agent2llm adapters        # implemented / detected / verified, per adapter
 ```
 
 Non-interactive:
@@ -145,37 +88,70 @@ agent2llm run \
   --goal "Implement dark mode"
 ```
 
-Verify a pairing without contacting any product:
+Check a pairing without contacting any product:
 
 ```bash
 agent2llm run --brain chatgpt-web --harness workbuddy --dry-run
 ```
 
----
+## Driving a browser you already have open
 
-## Example session
+The ChatGPT and Claude Web Brains need a browser. Getting one is the part people
+get wrong, so it is worth being explicit about the three options and the order
+they are tried in.
 
-```text
-$ agent2llm run --brain chatgpt-web --harness dsh --goal "Implement authentication"
+| Order | Mode | What happens | Cost |
+| --- | --- | --- | --- |
+| 1 | `cdp` | Attach to a window that is already open | none — you are already signed in |
+| 2 | `playwright` | Launch a browser with its own profile | you sign in again; a fresh Chromium is what anti-automation checks look for |
+| 3 | `manual` | Agent2LLM writes the message to a file, you paste it | slow, always works, no dependencies |
 
-Starting ChatGPT × DeepSeek Harness
+Attaching is preferred because it is cheaper and steadier: the session lives in
+a window you can watch, it survives between CLI runs, and you never log in twice.
 
-Brain      inspecting workspace...
-Brain      plan ready (4 actions)
-Harness    executing iteration 1...
-Harness    7 files changed, 18 tests passed
-Brain      reviewing actual diff...
-Brain      revision required
-Harness    executing iteration 2...
-Brain      reviewing...
-Done.
+**It is not a desktop-app-specific feature.** The transport speaks DevTools, so
+anything that exposes a DevTools port can be driven — the desktop build, or your
+own Edge/Chrome. There is no per-application adapter to maintain.
+
+Start a window with a debug port. With Edge, which is what this was tested
+against:
+
+```bash
+msedge --remote-debugging-port=9222 --user-data-dir=%LOCALAPPDATA%\a2l-window
 ```
 
-The user never sees OAuth scopes, PKCE verifiers, localhost ports or raw
-protocol packets. `--verbose`, `--debug` and `--json` are there for when you do
-want them.
+Then confirm it is seen and run:
 
----
+```bash
+agent2llm detect                       # 'Window attach' should say PASS
+agent2llm run --brain chatgpt-web --harness workbuddy \
+  --goal "Add a README badge" \
+  --endpoint http://127.0.0.1:9222
+```
+
+`--endpoint` is a shortcut for `AGENT2LLM_ATTACH_ENDPOINT`. Without either, the
+three default ports are swept.
+
+A port is only treated as attachable when `/json/version` answers on it and names
+the engine. An open socket is not evidence, and guessing turns "no window" into a
+confusing protocol error later. Detaching ends our session; it does not close the
+window, which `tests/cdp-attach.test.mjs` asserts.
+
+### About the desktop build
+
+An Electron or WebView2 shell should accept `--remote-debugging-port` the way any
+Chromium shell does, which would put it on the same path as Edge above. Whether a
+particular build allows the flag is per-build, and no amount of reading
+documentation settles it — only starting it and looking.
+
+```bash
+# start it with a debug port, then:
+agent2llm detect
+```
+
+If it answers, `detect` and `doctor` will say so. If it does not, they say that
+instead. That is as far as this project can honestly go from a machine with no
+desktop build installed — see [Known gaps](#known-gaps).
 
 ## Commands
 
@@ -193,137 +169,136 @@ agent2llm config
 agent2llm version
 ```
 
-`--json` works for `detect`, `doctor`, `adapters`, `session` and the rest, so
-other agents can consume the output.
+`--json` works on `detect`, `doctor`, `adapters`, `session` and the rest, so other
+agents can consume the output.
 
----
+## Adapter status
 
-## Support matrix — honest edition
+Taken from `agent2llm adapters` on the development machine. Legend:
+**implemented** = code complete and the contract suite is green ·
+**detected** = found on this machine · **verified** = an end-to-end run was
+actually observed.
 
-Captured with `agent2llm adapters` on the development machine:
-
-| Adapter | Role | Status | Real E2E |
+| Adapter | Role | Status | End-to-end |
 | --- | --- | --- | --- |
 | `mock-brain` | brain | verified | yes |
-| `chatgpt-web` | brain | implemented | **unverified** — needs login |
-| `claude-web` | brain | implemented | **unverified** — needs login |
-| `api` | brain | implemented | **unverified** — needs a key |
-| `workbuddy` | harness | **detected** (`codebuddy` 2.137.1) | not run |
-| `codex` | harness | implemented | **unverified** — not installed here |
-| `cursor` | harness | implemented | **unverified** — not installed here |
-| `claude-code` | harness | implemented | **unverified** — not installed here |
-| `opencode` | harness | implemented | **unverified** — not installed here |
+| `chatgpt-web` | brain | implemented | not run — needs a login |
+| `claude-web` | brain | implemented | not run — needs a login |
+| `api` | brain | implemented | not run — needs a key |
+| `workbuddy` | harness | detected (`codebuddy` 2.137.1) | not run |
+| `dsh` | harness | detected (`dsh` 0.1.2-rc.1) | not run |
+| `codex` | harness | implemented | not installed here |
+| `cursor` | harness | implemented | not installed here |
+| `claude-code` | harness | implemented | not installed here |
+| `opencode` | harness | implemented | not installed here |
 | `mock-harness` | harness | verified | yes |
 
-The API Brain is the one Brain with no MCP client of its own, so it gets the
-read-only tool surface **in-process** and calls it through provider tool calling.
+The API Brain is the one Brain without an MCP client of its own, so it gets the
+read-only tool surface in-process and reaches it through provider tool calling.
 Without a data plane it declares no workspace access rather than pretending —
 see [`docs/adapters/api.md`](docs/adapters/api.md).
 
-Legend: **implemented** = code complete and contract suite green ·
-**detected** = found on this machine · **verified** = end-to-end observed.
+## Known gaps
 
-README never says "fully supported" for anything that has not been verified.
+Listed because they are real, not because they are interesting.
 
----
+- Only the `mock-brain` × `mock-harness` pair has been run end to end. Everything
+  else is contract-tested and dry-run checked.
+- Nothing has been verified against a live ChatGPT or Claude account from this
+  machine. The browser transport is verified up to a page loading; login, MCP
+  pairing and a full turn are not.
+- The desktop build has not been tried here, because none is installed.
+- Web Brains scrape a UI, so selectors break when the site changes. The selectors
+  are in one file per Brain, on purpose.
+- `chatgpt.com` must be reachable. Cloudflare answers a headless Chromium with
+  403; the transport runs headed, and login, CAPTCHA and 2FA are always completed
+  by a person in the real UI, never automated around.
+- CI ships disabled — see [Enabling CI](#enabling-ci).
 
 ## Security model
 
-- **The Brain cannot write.** No `write_file`, `shell`, `git_commit`,
-  `install_package` — those tools do not exist in the Brain-facing server.
+- **The Brain cannot write.** No `write_file`, `shell`, `git_commit` or
+  `install_package` exists in the Brain-facing tool surface.
 - **File content cannot grant capability.** Permissions come from code and
-  config, never from model text. Prompt injection can mislead judgement, not
-  grant a shell.
+  config, never from model text. A prompt injection can mislead judgement; it
+  cannot hand out a shell.
 - **Canonical path containment.** `../`, absolute paths, symlinks, directory
   symlinks, junctions and case tricks all fail closed.
-- **Sensitive files denied.** `.env`, keys, SSH/cloud credentials, token files,
-  auth databases, browser profiles. `.env.example` stays readable.
+- **Sensitive files are denied.** `.env`, keys, SSH and cloud credentials, token
+  files, auth databases, browser profiles. `.env.example` stays readable.
 - **Opaque workspace ids.** The Brain sees `a2lw_…`, never a filesystem path.
-- **OAuth 2.1 + PKCE S256 + DCR**, rotating refresh tokens, hashed storage,
+- **OAuth 2.1 + PKCE S256 + DCR**, rotating refresh tokens, hashed at rest,
   one-time pairing codes with TTL and rate limits.
 - **Redacted logs.** Tokens, pairing codes, keys, cookies, auth headers.
-- **No reverse proxy, no cookie theft, no private-API interception.** CAPTCHA,
-  2FA and login are completed by you, in the official UI.
+- **No reverse proxy, no cookie theft, no private-API interception.** Login,
+  CAPTCHA and 2FA are done by you, in the official interface.
 
 Full model: [`docs/security/threat-model.md`](docs/security/threat-model.md).
 
----
+## Writing a harness
 
-## Add your own harness
-
-Write one class:
+One class, one manifest:
 
 ```ts
 export class MyHarness extends HarnessAdapterBase {
-  metadata() { return { id: "my-harness", name: "My Harness", version: "0.1.0", role: "harness" }; }
+  metadata() {
+    return { id: "my-harness", name: "My Harness", version: "0.1.0", role: "harness" };
+  }
   async capabilities() { /* declare what really exists */ }
   async execute(session, task) { /* actually run it */ }
 }
 ```
 
-Publish it as `@agent2llm/harness-my-harness` with an `apiVersion` in its
-manifest. Then:
-
-```text
-ChatGPT   × My Harness
-Claude    × My Harness
-API Brain × My Harness
-```
-
-… all work, with **no change to Core**. That is the project's success criterion.
-
----
+Publish it as `@agent2llm/harness-my-harness` with an `apiVersion` in the
+manifest, and it composes with every Brain above without a change to Core.
 
 ## Upstream attribution
 
 Agent2LLM adapts substantial, security-critical code from
 [`XiaoDuoYa/codex-with-chatgpt`](https://github.com/XiaoDuoYa/codex-with-chatgpt)
-(MIT) — OAuth/PKC−/pairing, workspace containment, read-only MCP, execution
-records, tunnel and daemon lifecycle, redacting logger. See
+(MIT): OAuth/PKCE/pairing, workspace containment, read-only MCP, execution
+records, tunnel and daemon lifecycle, the redacting logger. See
 [`docs/C2C_REUSE_MAP.md`](docs/C2C_REUSE_MAP.md) and
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-The protocol is **A2L** (`a2l/1`), not C2C; a state mapping is kept for
+The protocol here is A2L (`a2l/1`), not C2C. A state mapping is kept for
 migration.
-
----
 
 ## Development
 
 ```bash
 npm run build       # tsc -b
 npm run typecheck
-npm test            # protocol, contract, security, orchestrator, browser probe — 70 assertions
+npm test            # protocol, contract, security, orchestrator, transports
 npm run lint
 npm run verify
 ```
 
-### Web Brain browser (optional)
+Tests are plain Node scripts — there is no test framework to install. Each file
+runs in its own process against an isolated `AGENT2LLM_STATE_DIR`.
 
-The ChatGPT and Claude Web Brains drive the official UI through Playwright plus a
-browser engine. Both are optional: without them a Web Brain falls back to the
-manual transport and still works.
+### Browser engine (optional)
+
+The Web Brains drive the official UI through Playwright. It is optional: without
+it, a Web Brain still runs over `cdp` or the manual transport.
 
 ```bash
 npm i -D playwright
 npx playwright install chromium
 ```
 
-Chromium is around 310 MB. To keep it off the system drive, set
-`PLAYWRIGHT_BROWSERS_PATH` to another disk *before* installing — or install to
-the default location and put a directory junction there pointing at the other
-disk, which needs no environment variable at run time.
-
-The browser must run **headed**. Cloudflare answers headless Chromium with a 403,
-and login, CAPTCHA and 2FA are always completed by the human in the real UI —
-never automated around. Reachability of `chatgpt.com` is your own network's job.
+Chromium is roughly 310 MB. To keep it off the system drive, either set
+`PLAYWRIGHT_BROWSERS_PATH` before installing, or install to the default location
+and put a directory junction there pointing at another disk — the junction needs
+no environment variable at run time.
 
 ### Enabling CI
 
-The workflow ships at [`.github/ci/github-actions.yml`](.github/ci/github-actions.yml)
-(Linux / Windows / macOS × Node 20 / 22) instead of under `.github/workflows/`,
-because GitHub rejects any push that touches that directory unless the credential
-carries the `workflow` scope. To switch it on:
+The workflow ships at
+[`.github/ci/github-actions.yml`](.github/ci/github-actions.yml) — Linux, Windows
+and macOS across Node 20 and 22 — rather than under `.github/workflows/`, because
+GitHub rejects any push touching that directory unless the credential carries the
+`workflow` scope, and a push is atomic: one rejected file rejects all of them.
 
 ```bash
 node scripts/enable-ci.mjs    # copies it to .github/workflows/ci.yml
@@ -331,12 +306,11 @@ git add .github/workflows/ci.yml
 git commit -m "ci: enable GitHub Actions workflow"
 ```
 
-That last push needs a token with both `repo` and `workflow` scopes —
-create one at <https://github.com/settings/tokens>.
+That push needs a token with both `repo` and `workflow` scopes.
 
 ## Docs
 
-- [Architecture overview](docs/architecture/overview.md) ·
+- [Architecture](docs/architecture/overview.md) ·
   [Adapters](docs/architecture/adapters.md) ·
   [Browser transport](docs/architecture/browser-transport.md) ·
   [Workspace broker](docs/architecture/workspace-broker.md)
@@ -344,8 +318,7 @@ create one at <https://github.com/settings/tokens>.
   [State machine](docs/protocol/state-machine.md)
 - [Threat model](docs/security/threat-model.md) ·
   [Workspace isolation](docs/security/workspace-isolation.md)
-- [Workflows](docs/workflows/README.md) ·
-  [Troubleshooting](docs/troubleshooting.md)
+- [Workflows](docs/workflows/README.md) · [Troubleshooting](docs/troubleshooting.md)
 - [ADRs](docs/adr/) · [Prior art: C2C](docs/prior-art/C2C.md)
 
 ## License

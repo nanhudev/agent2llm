@@ -14,7 +14,8 @@ in the system ends up in the least reviewed place.
 
 Browser control is a Core capability: `BrowserTransport`
 (`packages/transports/src/browser.ts`), with a Playwright implementation and a
-manual (inbox file) implementation.
+manual (inbox file) implementation. A CDP implementation that attaches to a
+window the user already has open was added later — see ADR-007.
 
 Hard rules:
 
