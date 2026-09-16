@@ -15,7 +15,14 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { findAttachEndpoint } from "./browser.js";
+import {
+  WEBVIEW2_ARGS_ENV,
+  existingDevToolsActivePortFiles,
+  findAttachEndpoint,
+} from "./browser.js";
+
+/** The desktop build's own profile directories, as opposed to unrelated ones. */
+const DESKTOP_PROFILE_MATCH = /chatgpt|openai/i;
 
 export interface DesktopAppProbe {
   id: string;
@@ -30,6 +37,12 @@ export interface DesktopAppProbe {
   endpoint?: string;
   /** What `/json/version` said was behind that endpoint. */
   endpointBrowser?: string;
+  /**
+   * Profile files that name a port, whether or not anything is listening.
+   * A file with nothing behind it means the app is installed but not running —
+   * a different situation from "this build cannot be attached to".
+   */
+  profileFiles: string[];
   /** Plain-language next step, phrased for a person, not a log file. */
   hint: string;
 }
@@ -139,9 +152,11 @@ export async function probeDesktopApp(
   );
   const installed = executables.length > 0;
   const running = isProcessRunning(["ChatGPT.exe", "ChatGPT"]);
+  const profileFiles = existingDevToolsActivePortFiles({ match: DESKTOP_PROFILE_MATCH });
 
   const attach = await findAttachEndpoint({
     ...(options.ports ? { ports: options.ports } : {}),
+    match: DESKTOP_PROFILE_MATCH,
     timeoutMs,
   });
   if (attach) {
@@ -153,6 +168,7 @@ export async function probeDesktopApp(
       running,
       endpoint: attach.endpoint,
       endpointBrowser: attach.browser,
+      profileFiles,
       hint: `Attaching is available at ${attach.endpoint} (${attach.browser ?? "unknown engine"}).`,
     };
   }
@@ -163,8 +179,11 @@ export async function probeDesktopApp(
     installed,
     executables,
     running,
-    hint: installed
-      ? "Installed but no DevTools port answered. Whether a build accepts a debug flag is only knowable by trying: relaunch it with one, then re-run `agent2llm detect`."
-      : "Not installed. Install the official desktop app, or attach to Edge/Chrome started with --remote-debugging-port.",
+    profileFiles,
+    hint: !installed
+      ? "Not installed. Install the official desktop app, or attach to Edge/Chrome started with --remote-debugging-port."
+      : profileFiles.length > 0
+        ? `Profile found at ${profileFiles[0]}, but nothing answered on its port — the app is most likely not running. Start it, then re-run \`agent2llm detect\`.`
+        : `Installed, but no port is published. The engine has to be told to open one: set ${WEBVIEW2_ARGS_ENV}=--remote-debugging-port=9222 before launching, or add the same flag under HKCU\\Software\\Policies\\Microsoft\\Edge\\WebView2\\AdditionalBrowserArguments, then restart the app.`,
   };
 }

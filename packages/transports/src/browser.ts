@@ -12,6 +12,8 @@
  *     USER_ACTION_REQUIRED and never automated around
  */
 import { createRequire } from "node:module";
+import fs from "node:fs";
+import path from "node:path";
 
 export interface BrowserSelectors {
   /** Input box the adapter types the control message into. */
@@ -193,21 +195,167 @@ export async function probeAttachEndpoint(
   return result;
 }
 
+/* ------------------------------------------------------------------ *
+ * Profiles that name their own port
+ *
+ * A window started with `--remote-debugging-port=9222` can be found by
+ * guessing the port. A WebView2 host — which is what the packaged desktop
+ * builds are — often cannot: the engine may bind an arbitrary port and record
+ * it in a profile file instead. So before sweeping ports we read the file
+ * Chromium writes for exactly this purpose.
+ * ------------------------------------------------------------------ */
+
+/** Chromium writes this into its user-data directory when it starts listening. */
+export const DEVTOOLS_ACTIVE_PORT_FILE = "DevToolsActivePort";
+
+/** WebView2 hosts read this to hand extra flags to the engine at startup. */
+export const WEBVIEW2_ARGS_ENV = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
+
+/**
+ * Where a WebView2 host keeps its profile, relative to the app's data root.
+ * A packaged (MSIX / Microsoft Store) app is redirected under `Packages\<id>`,
+ * so the same file can sit at several depths depending on how the host asked
+ * for its user data directory.
+ */
+const WEBVIEW2_PROFILE_SUBPATHS: readonly (readonly string[])[] = [
+  ["EBWebView"],
+  ["LocalCache", "EBWebView"],
+  ["LocalCache", "Local", "EBWebView"],
+  ["LocalCache", "Roaming", "EBWebView"],
+  ["LocalState", "EBWebView"],
+];
+
+function safeReaddir(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    // Missing or unreadable: absence of evidence, which is not a failure.
+    return [];
+  }
+}
+
+export interface ProfileSearchOptions {
+  /** Data root to search. Defaults to the platform's app data directory. */
+  root?: string;
+  /** Directory names worth looking into. */
+  match?: RegExp;
+}
+
+/**
+ * Candidate `DevToolsActivePort` files, whether or not they exist.
+ *
+ * One level below the data root is enumerated rather than assumed: installers
+ * and Store package names change between releases, so a hardcoded path list
+ * goes stale, while a listing plus a name filter does not.
+ *
+ * `root` is injectable so a test can point this at a fixture directory instead
+ * of the real profile store.
+ */
+export function devToolsActivePortPaths(options: ProfileSearchOptions = {}): string[] {
+  const root =
+    options.root ?? (process.platform === "win32" ? process.env.LOCALAPPDATA ?? "" : "");
+  if (root === "") return [];
+  const match = options.match ?? /chatgpt|openai/i;
+
+  const out: string[] = [];
+  const push = (candidate: string) => {
+    if (!out.includes(candidate)) out.push(candidate);
+  };
+
+  for (const entry of safeReaddir(root)) {
+    if (!match.test(entry)) continue;
+    for (const sub of WEBVIEW2_PROFILE_SUBPATHS) {
+      push(path.join(root, entry, ...sub, DEVTOOLS_ACTIVE_PORT_FILE));
+    }
+  }
+
+  const packages = path.join(root, "Packages");
+  for (const entry of safeReaddir(packages)) {
+    if (!match.test(entry)) continue;
+    for (const sub of WEBVIEW2_PROFILE_SUBPATHS) {
+      push(path.join(packages, entry, ...sub, DEVTOOLS_ACTIVE_PORT_FILE));
+    }
+  }
+  return out;
+}
+
+/** The subset of candidates that is actually on disk. */
+export function existingDevToolsActivePortFiles(options: ProfileSearchOptions = {}): string[] {
+  return devToolsActivePortPaths(options).filter((file) => fs.existsSync(file));
+}
+
+/**
+ * Read the port an engine actually bound.
+ *
+ * Line one is the port, line two is the browser WebSocket path. Only the port
+ * is used: the HTTP endpoint derived from it answers `/json/version` the same
+ * way a window launched with an explicit flag does, and `connectOverCDP` takes
+ * either form.
+ *
+ * A stale file left behind by an exited process is not reported as an error.
+ * The endpoint derived from it simply fails to answer, which is the same
+ * outcome as no file at all — and the caller already treats that as normal.
+ */
+export function readDevToolsActivePort(file: string): AttachEndpoint | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  const first = raw.split(/\r?\n/)[0]?.trim() ?? "";
+  const port = Number.parseInt(first, 10);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
+  return { endpoint: `http://127.0.0.1:${port}` };
+}
+
+/** Endpoints named by profile files, deduplicated, in discovery order. */
+export function discoverAttachEndpoints(options: ProfileSearchOptions = {}): string[] {
+  const out: string[] = [];
+  for (const file of devToolsActivePortPaths(options)) {
+    const found = readDevToolsActivePort(file);
+    if (found && !out.includes(found.endpoint)) out.push(found.endpoint);
+  }
+  return out;
+}
+
+export interface FindAttachEndpointOptions extends ProfileSearchOptions {
+  ports?: number[];
+  timeoutMs?: number;
+  /** Skip profile discovery and try exactly these endpoints. */
+  extraEndpoints?: string[];
+}
+
 /**
  * First DevTools endpoint that answers, if any.
  *
+ * Profile-named endpoints are tried before the conventional ports: a port an
+ * engine recorded itself is evidence, a port we guessed is a hunch.
+ *
  * Shared by transport selection, the desktop-app probe and `doctor`, so all
- * three agree on what "attachable" means instead of each sweeping the port
- * list their own way.
+ * three agree on what "attachable" means instead of each sweeping their own
+ * way.
  */
 export async function findAttachEndpoint(
-  options: { ports?: number[]; timeoutMs?: number } = {}
+  options: FindAttachEndpointOptions = {}
 ): Promise<AttachEndpoint | null> {
+  const timeoutMs = options.timeoutMs ?? 800;
+
+  const discovered =
+    options.extraEndpoints ??
+    discoverAttachEndpoints({
+      ...(options.root !== undefined ? { root: options.root } : {}),
+      ...(options.match !== undefined ? { match: options.match } : {}),
+    });
+
+  for (const endpoint of discovered) {
+    const hit = await probeAttachEndpoint(endpoint, { timeoutMs });
+    if (hit) return hit;
+  }
+
   const ports = options.ports ?? DEFAULT_DEVTOOLS_PORTS;
   for (const port of ports) {
-    const hit = await probeAttachEndpoint(`http://127.0.0.1:${port}`, {
-      timeoutMs: options.timeoutMs ?? 800,
-    });
+    const hit = await probeAttachEndpoint(`http://127.0.0.1:${port}`, { timeoutMs });
     if (hit) return hit;
   }
   return null;
