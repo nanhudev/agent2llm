@@ -212,6 +212,30 @@ export class WebBrainSession {
     );
   }
 
+  /**
+   * Refuse to pretend a desktop application shell is the website.
+   *
+   * A packaged desktop build can expose a DevTools port and be attached to
+   * successfully, and still be unusable by this adapter: it renders its own UI
+   * from a private `app://` scheme rather than loading the website, so the
+   * site's selectors describe nothing on it. That is a real limitation of
+   * driving the app, not a bug in the attach path, and it deserves a sentence
+   * the user can act on rather than a timeout on a missing composer.
+   *
+   * Checked here, in the runtime every web Brain shares, so each adapter does
+   * not have to rediscover it.
+   */
+  private assertNotApplicationShell(transport: BrowserTransport): void {
+    if (!(transport instanceof CdpBrowserTransport)) return;
+    if (!transport.attachedToApplicationShell) return;
+    throw browserFailure(
+      `Attached to an application window (${transport.shellUrl}) rather than to ${this.config.displayName} on the web. ` +
+        `The desktop build serves its own interface and is not the website, so the ${this.config.displayName} selectors do not apply to it. ` +
+        `Use the web app in a browser with a DevTools port instead, or run with --transport manual to carry messages by hand.`,
+      { retryable: false }
+    );
+  }
+
   private launchOptions(): BrowserLaunchOptions {
     if (this.mode === "cdp") {
       return {
@@ -230,6 +254,7 @@ export class WebBrainSession {
     const transport = this.build();
     await transport.launch(this.launchOptions());
     await transport.open(url);
+    this.assertNotApplicationShell(transport);
     this.transport = transport;
 
     if (this.mode === "manual") {
@@ -282,6 +307,7 @@ export class WebBrainSession {
     const transport = this.build();
     await transport.launch(this.launchOptions());
     await transport.open(ref.url);
+    this.assertNotApplicationShell(transport);
     this.transport = transport;
   }
 

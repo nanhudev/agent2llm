@@ -12,7 +12,12 @@ import { getStateDir, loadMachineConfig } from "@agent2llm/config";
 import { findBridgeObservation } from "@agent2llm/bridge";
 import { WorkspaceRegistry } from "@agent2llm/workspace";
 import { SessionStore } from "@agent2llm/session";
-import { findAttachEndpoint, probeBrowserModule, probeDesktopApp } from "@agent2llm/transports";
+import {
+  findAttachEndpoint,
+  probeBrowserModule,
+  probeDesktopApp,
+  resetAttachProbeCache,
+} from "@agent2llm/transports";
 import * as ui from "../ui.js";
 import { registerExternalAdapters } from "../registry.js";
 
@@ -66,6 +71,9 @@ export async function runDoctor(
   });
 
   const browser = probeBrowserModule();
+  // A doctor run is an explicit "tell me the state right now". A cached answer
+  // from a second ago is precisely what the user is asking us not to trust.
+  resetAttachProbeCache();
   const attach = await findAttachEndpoint();
   const desktop = await probeDesktopApp();
 

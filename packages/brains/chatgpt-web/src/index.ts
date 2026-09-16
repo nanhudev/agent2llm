@@ -137,7 +137,7 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
         "Control messages are parsed from a text block typed in the chat UI; no native structured-output channel.",
         "DOM selectors are version-sensitive and may need updating when ChatGPT changes its UI.",
         "Login, CAPTCHA and 2FA must be completed by the human in the official interface.",
-        "Whether a particular desktop build accepts a DevTools port is per-build, and is settled by trying it rather than by this manifest.",
+        "The desktop build is attachable but not drivable: it serves its own interface from an app:// scheme instead of loading chatgpt.com, so these selectors do not describe it. Use the web app in a browser window.",
       ],
       auth: { required: true, authenticated: false, method: "official web login + OAuth 2.1 MCP pairing" },
       facts: {
@@ -146,6 +146,8 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
         transportReason: selection.reason,
         desktopAppInstalled: desktop.installed,
         desktopAppRunning: desktop.running === null ? "unknown" : desktop.running,
+        ...(desktop.executables.length > 0 ? { desktopAppExecutable: desktop.executables[0] } : {}),
+        ...(desktop.endpoint ? { desktopAppEndpoint: desktop.endpoint } : {}),
         ...(selection.endpoint ? { attachEndpoint: selection.endpoint } : {}),
       },
     };

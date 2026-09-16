@@ -43,11 +43,43 @@ function isReusableBlank(url: string): boolean {
   );
 }
 
+/**
+ * A page that is a whole application shell rather than a web document.
+ *
+ * `app://` (and Electron's `file://` bundles) serve an application's own UI
+ * from a private scheme, cross-origin to everything else and usually blocked
+ * from navigation. The packaged ChatGPT build is one of these: it does not
+ * embed chatgpt.com, so its DOM is its own and the website selectors do not
+ * describe it. Recognising the scheme lets the transport say so plainly instead
+ * of timing out on a missing composer.
+ */
+function isApplicationShell(url: string): boolean {
+  return url.startsWith("app://") || url.startsWith("chrome-extension://");
+}
+
 export class CdpBrowserTransport extends ChromiumPageTransport {
   readonly kind = "cdp";
 
   constructor(selectors: BrowserSelectors) {
     super(selectors);
+  }
+
+  /** Set when the attached window turned out to be an application shell. */
+  private applicationShellUrl = "";
+
+  /**
+   * Did we attach to an app shell rather than to a web page?
+   *
+   * Exposed because it is an expected, explainable situation rather than a
+   * failure of the transport: the window is real, the session works, and the
+   * website selectors simply do not apply to it.
+   */
+  get attachedToApplicationShell(): boolean {
+    return this.applicationShellUrl !== "";
+  }
+
+  get shellUrl(): string {
+    return this.applicationShellUrl;
   }
 
   protected async openContext(options: BrowserLaunchOptions): Promise<ContextHandle> {
@@ -107,6 +139,12 @@ export class CdpBrowserTransport extends ChromiumPageTransport {
 
     const blank = pages.find((page) => isReusableBlank(page.url()));
     if (blank) return blank;
+
+    const shell = pages.find((page) => isApplicationShell(page.url()));
+    if (shell) {
+      this.applicationShellUrl = shell.url();
+      return shell;
+    }
 
     return pages.length > 0 ? pages[0]! : await this.context!.newPage();
   }
