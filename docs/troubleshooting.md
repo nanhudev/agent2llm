@@ -37,6 +37,48 @@ cursor adapter currently lacks attach-session capability.
 Fix by choosing a workflow that does not need that capability (for example
 `planner-only`), or by using an adapter that has it.
 
+## "requires authentication"
+
+Agent2LLM does not read another product's credentials, so for most adapters
+the sign-in state is **unknown**, not false. Unknown is reported as a warning
+and the run proceeds — the truth arrives when the page opens.
+
+A refusal means an adapter actually measured the state. Check what it says:
+
+```text
+Brain adapter 'api' requires authentication (OPENAI_API_KEY ...).
+```
+
+Then either satisfy it, or override it when you know the session exists:
+
+```bash
+agent2llm run --brain chatgpt-web --harness workbuddy --ignore-auth --goal "..."
+```
+
+## "No DevTools endpoint answered"
+
+`doctor` reports this when it found no window to attach to. The repair line
+names which place it searched, and the cause differs per line:
+
+- **"Nothing answered at …"** — you passed `--endpoint` (or set
+  `AGENT2LLM_ATTACH_ENDPOINT`) and that port is dead. Check the window is
+  still open and the port matches.
+- **"A window profile names …, but nothing answered there"** — a
+  `DevToolsActivePort` file is stale: Chromium does not always rewrite or
+  remove it, so it can name a port from a run that has exited. Restart that
+  app.
+- **"Nothing answered on 9222, 9223, 9229"** — no window was started with a
+  debug port, or it listens elsewhere. Start one, or name the port:
+
+```bash
+curl -s http://127.0.0.1:<port>/json/version          # confirm it answers
+agent2llm run --brain chatgpt-web --harness <id> --endpoint http://127.0.0.1:<port> --goal "..."
+export AGENT2LLM_ATTACH_PORTS=<port>                  # or sweep it every time
+```
+
+A port of `9222` that "answers" with a `502` and a proxy banner is not a
+browser: something else on the machine is listening there.
+
 ## Brain never replies
 
 - Is a login, CAPTCHA or 2FA pending? Agent2LLM emits `USER_ACTION_REQUIRED`

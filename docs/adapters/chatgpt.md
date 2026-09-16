@@ -22,6 +22,64 @@ Flow:
 4. `verifyWorkspace` — confirm the Brain can actually reach the read-only MCP
    connector before the run starts.
 
+## Getting it running
+
+The Brain needs a real, signed-in ChatGPT window. There are two ways to get
+one, and the difference is who starts the browser.
+
+### Attach to a window you started (recommended)
+
+The window keeps your existing login, so there is no second sign-in, and you
+can watch or interrupt the conversation.
+
+```bash
+# Edge
+msedge --remote-debugging-port=9222
+# Chrome / Chromium
+chrome --remote-debugging-port=9222
+```
+
+Sign in at <https://chatgpt.com> in that window, then:
+
+```bash
+agent2llm doctor                 # "Window attach" should be PASS
+agent2llm run --brain chatgpt-web --harness workbuddy --goal "..."
+```
+
+If your window listens on another port, name it:
+
+```bash
+# one run
+agent2llm run --brain chatgpt-web --harness workbuddy --endpoint http://127.0.0.1:9333 --goal "..."
+
+# or make discovery always sweep it
+export AGENT2LLM_ATTACH_PORTS=9333
+```
+
+`AGENT2LLM_ATTACH_PORTS` exists for `--remote-debugging-port=0`, where the
+engine picks a free port and no readable profile records it.
+
+### Let Agent2LLM launch a browser
+
+With no window to attach to and Playwright installed, the Brain launches its
+own Chromium with a **persistent** profile under
+`<state-dir>/browser-profiles/chatgpt-web`. You sign in on the first run; the
+sign-in survives later runs. Nothing else is needed.
+
+### Desktop app caveat
+
+The packaged ChatGPT desktop app can be *attached* to but not *driven*: it
+serves its own UI from an `app://` scheme, and its `chatgpt.com` webviews are
+not exposed as drivable pages. Use the web app in a browser window.
+
+### Authentication
+
+Agent2LLM does not read another product's credentials, so for this adapter the
+sign-in state is **unknown** until a run actually opens the page. That shows as
+a warning, not a refusal — blocking on it would stop the run before the window
+you need to sign in ever opened. If an adapter has genuinely *measured* that it
+is not authenticated, `--ignore-auth` overrides it.
+
 ## Transport
 
 Reached through `BrowserTransport`, in preference order:
