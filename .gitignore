@@ -4,6 +4,10 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Publish staging (assembled by scripts/pack.mjs; the tgz is a build artifact)
+staging/
+agent2llm-*.tgz
+
 # Local Agent2LLM state (secrets, pairing, sessions) — never in the repo.
 .agent2llm/
 *.log
