@@ -1,7 +1,7 @@
 {
-  "name": "@agent2llm/brain-api",
+  "name": "@agent2llm/metrics",
   "version": "0.1.0",
-  "description": "Agent2LLM brain-api package",
+  "description": "Agent2LLM token usage metrics",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -17,8 +17,7 @@
     "dist"
   ],
   "dependencies": {
-    "@agent2llm/adapter-sdk": "*",
-    "@agent2llm/metrics": "*",
-    "@agent2llm/protocol": "*"
+    "@agent2llm/config": "*",
+    "zod": "^3.25.0"
   }
 }

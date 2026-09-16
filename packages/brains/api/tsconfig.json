@@ -12,6 +12,9 @@
       "path": "../../adapter-sdk"
     },
     {
+      "path": "../../metrics"
+    },
+    {
       "path": "../../protocol"
     }
   ]

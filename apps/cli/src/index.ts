@@ -22,6 +22,7 @@ import {
   runConfigShow,
 } from "./commands/session.js";
 import { runSetup, runPair, runUnpair, runLogs, runVersion, runConfigSet } from "./commands/setup.js";
+import { runReport } from "./commands/report.js";
 
 interface Flags {
   _: string[];
@@ -85,6 +86,7 @@ function usage(): void {
   ui.line(`    ${CLI_NAME} workspace list|add|remove [path|id]`);
   ui.line(`    ${CLI_NAME} pair|unpair [workspace]`);
   ui.line(`    ${CLI_NAME} logs [--json] [--lines N]`);
+  ui.line(`    ${CLI_NAME} report [--json]`);
   ui.line(`    ${CLI_NAME} config [--json] | config set <key> <value>`);
   ui.line(`    ${CLI_NAME} version`);
   ui.line();
@@ -219,6 +221,10 @@ async function main(): Promise<number> {
 
       case "logs":
         await runLogs({ json, ...(str(flags.lines) ? { lines: Number.parseInt(str(flags.lines)!, 10) } : {}) });
+        return 0;
+
+      case "report":
+        runReport({ json });
         return 0;
 
       case "version":

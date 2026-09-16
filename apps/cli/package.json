@@ -33,6 +33,7 @@
     "@agent2llm/harness-opencode": "*",
     "@agent2llm/harness-workbuddy": "*",
     "@agent2llm/logger": "*",
+    "@agent2llm/metrics": "*",
     "@agent2llm/orchestrator": "*",
     "@agent2llm/session": "*",
     "@agent2llm/transports": "*",

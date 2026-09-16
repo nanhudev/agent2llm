@@ -25,10 +25,13 @@ import {
   type VerificationResult,
 } from "@agent2llm/adapter-sdk";
 import { createOpenAiCompatibleProvider, type BrainProvider, type ChatTurn } from "./providers.js";
+import { phaseForState, recordBrainUsage, type UsagePhase } from "@agent2llm/metrics";
 
 interface ApiSessionState {
   provider: BrainProvider;
   history: ChatTurn[];
+  /** Workflow phase of the turn currently being produced. */
+  phase: UsagePhase;
 }
 
 const sessions = new Map<string, ApiSessionState>();
@@ -142,7 +145,7 @@ export class ApiBrain extends BaseBrainAdapter {
   }
 
   async createSession(ctx: BrainSessionContext): Promise<BrainSession> {
-    sessions.set(ctx.sessionId, { provider: this.provider, history: [] });
+    sessions.set(ctx.sessionId, { provider: this.provider, history: [], phase: "other" });
     return { id: ctx.sessionId, adapterId: "api", ref: { provider: this.provider.id } };
   }
 
@@ -151,12 +154,14 @@ export class ApiBrain extends BaseBrainAdapter {
     sessions.set(id, {
       provider: this.provider,
       history: Array.isArray(checkpoint.ref.history) ? (checkpoint.ref.history as ChatTurn[]) : [],
+      phase: "other",
     });
     return { id, adapterId: "api", ref: { provider: this.provider.id } };
   }
 
   async sendControl(session: BrainSession, message: ControlMessage): Promise<void> {
     const state = this.stateFor(session);
+    state.phase = phaseForState(String(message.type));
     state.history.push({ role: "user", content: encodeControlMessage(message) });
   }
 
@@ -179,6 +184,7 @@ export class ApiBrain extends BaseBrainAdapter {
         messages: [{ role: "system", content: systemPrompt }, ...state.history],
         ...(this.canInspect && this.dataPlane ? { tools: this.dataPlane.tools } : {}),
       });
+      this.recordUsage(session, state, response);
 
       if (response.toolCalls && response.toolCalls.length > 0 && this.dataPlane) {
         await this.runToolCalls(state, response.toolCalls);
@@ -248,6 +254,34 @@ export class ApiBrain extends BaseBrainAdapter {
     };
   }
 
+  /**
+   * Records what a provider turn actually cost.
+   *
+   * Only written when the provider reported usage: an API Brain is billed per
+   * token, so the numbers are real. (Web Brains are subscription-metered and
+   * report nothing; the metrics package records nothing for them rather than
+   * inventing estimates.)
+   */
+  private recordUsage(
+    session: BrainSession,
+    state: ApiSessionState,
+    response: { model?: string; usage?: { promptTokens?: number; completionTokens?: number } }
+  ): void {
+    if (!response.usage) return;
+    const promptTokens = response.usage.promptTokens ?? 0;
+    const completionTokens = response.usage.completionTokens ?? 0;
+    if (promptTokens === 0 && completionTokens === 0) return;
+    recordBrainUsage({
+      sessionId: session.id,
+      brainId: this.metadata().id,
+      phase: state.phase,
+      promptTokens,
+      completionTokens,
+      ...(response.model ? { model: response.model } : {}),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   async close(session: BrainSession): Promise<void> {
     sessions.delete(session.id);
   }
@@ -255,7 +289,7 @@ export class ApiBrain extends BaseBrainAdapter {
   private stateFor(session: BrainSession): ApiSessionState {
     let state = sessions.get(session.id);
     if (!state) {
-      state = { provider: this.provider, history: [] };
+      state = { provider: this.provider, history: [], phase: "other" };
       sessions.set(session.id, state);
     }
     return state;

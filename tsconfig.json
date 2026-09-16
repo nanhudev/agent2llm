@@ -32,6 +32,9 @@
       "path": "packages/execution"
     },
     {
+      "path": "packages/metrics"
+    },
+    {
       "path": "packages/session"
     },
     {
