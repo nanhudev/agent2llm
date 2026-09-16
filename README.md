@@ -56,7 +56,21 @@ Harness acts.
 
 ## Install
 
-No npm package yet — install from source.
+```bash
+npm install -g agent2llm
+```
+
+Or without installing:
+
+```bash
+npx agent2llm doctor
+```
+
+Requires **Node.js >= 20**. Playwright ships as an optional dependency for the
+browser transports; without it, web brains fall back to the manual transport
+and everything else keeps working.
+
+Installing from source is still there when you need it:
 
 ```bash
 git clone https://github.com/nanhudev/agent2llm.git
@@ -65,8 +79,6 @@ npm install
 npm run build
 node apps/cli/dist/index.js version
 ```
-
-Requires **Node.js >= 20**.
 
 ## Quick start
 
@@ -93,6 +105,19 @@ Check a pairing without contacting any product:
 ```bash
 agent2llm run --brain chatgpt-web --harness workbuddy --dry-run
 ```
+
+What the thinking actually cost:
+
+```bash
+agent2llm report
+```
+
+The Brain is the only side that spends tokens, and it only thinks during
+inspect / plan / review. The report prints what the provider actually billed,
+per session and per phase — and the harness side of every run is 0 brain
+tokens by construction, because execution never consults a model. Web brains
+are subscription-metered and report nothing; nothing is estimated to fill
+that gap.
 
 ## Driving a browser you already have open
 

@@ -53,7 +53,20 @@ Agent2LLM Core
 
 ## 安装
 
-还没发 npm 包，从源码装：
+```bash
+npm install -g agent2llm
+```
+
+或者不装直接跑：
+
+```bash
+npx agent2llm doctor
+```
+
+需要 **Node.js >= 20**。Playwright 作为可选依赖随包分发（浏览器 transport 用）；
+没有它时 Web Brain 退到手动 transport，其余一切照常。
+
+需要从源码装时：
 
 ```bash
 git clone https://github.com/nanhudev/agent2llm.git
@@ -62,8 +75,6 @@ npm install
 npm run build
 node apps/cli/dist/index.js version
 ```
-
-需要 **Node.js >= 20**。
 
 ## 快速开始
 
@@ -90,6 +101,17 @@ agent2llm run \
 ```bash
 agent2llm run --brain chatgpt-web --harness workbuddy --dry-run
 ```
+
+思考到底花了多少钱：
+
+```bash
+agent2llm report
+```
+
+Brain 是协作里唯一按 token 花钱的一侧，而且只在 inspect / plan / review 时思考。
+report 打印 provider 实际计费的数字，按会话和阶段列出——而每次运行的 harness 一侧
+是 **0 个 brain token**，这是结构保证的：执行阶段从不咨询任何模型。Web 版按订阅计费、
+不报数，所以也不替它编一个估计值。
 
 ## 让它驱动一个你已经开着的窗口
 

@@ -8,6 +8,24 @@ All notable changes are documented here. Format follows
 
 ### Added
 
+- **Installable npm package.** `npm install -g agent2llm` now works: the CLI
+  is bundled into one ESM file (`scripts/bundle.mjs`, esbuild), assembled with
+  clean publish metadata (`scripts/pack.mjs`), and verified by installing the
+  packed tgz into a scratch directory and running `doctor` and the mock
+  end-to-end loop from there. Third-party runtime dependencies (zod, express,
+  the MCP SDK) stay external and auditable; Playwright ships as an
+  optionalDependency.
+- **Token usage metrics.** The API Brain records what its provider actually
+  billed, per session and per workflow phase (`inspect` / `plan` / `review` /
+  `revise`), to `<state>/usage/<session>.jsonl`. `agent2llm report` prints the
+  totals. The measurement is also the architectural claim: the harness side of
+  every run is 0 brain tokens by construction, because execution never
+  consults a model. Web brains are subscription-metered and report nothing;
+  nothing is estimated to fill that gap.
+- `AGENTS.md`: a runbook for AI agents asked to "install a2l" — install,
+  verify with `doctor`, prove the loop with the mock pair, then wire a real
+  brain. Pointing an agent at the repository is now a supported install path.
+
 - **Window attach transport.** Web Brains can now drive a Chromium window that is
   already open — a desktop build, or the user's own Edge/Chrome — over the
   DevTools protocol, and it is tried before launching a browser. `--endpoint`
