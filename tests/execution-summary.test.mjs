@@ -13,8 +13,10 @@
  * mark-up and retry chatter are not.
  */
 import { test, assert, assertEqual } from "@agent2llm/testing";
-import { CodexHarnessAdapter, createCodexHarness } from "@agent2llm/harness-codex";
+import { CodexHarnessAdapter, createCodexHarness, __test__ } from "@agent2llm/harness-codex";
 import { report } from "./_report.mjs";
+
+const { distillError } = __test__;
 
 /**
  * `summarize` is protected, so it is exercised the way a reviewer would see
@@ -85,8 +87,27 @@ test("execution-summary", "an HTML error page is not a summary", async () => {
 
 test("execution-summary", "retry chatter is not a summary", async () => {
   const summarize = summarizer();
-  const summary = summarize(FAIL_OUTCOME, ACC, null, "Reconnecting... 3/5 (unexpected status 403 Forbidden)");
-  assert(summary.includes("no readable message"), `retry chatter must not pass through, got: ${summary}`);
+  const cases = [
+    "Reconnecting... 3/5 (unexpected status 403 Forbidden)",
+    // The real shape Codex emitted: its own progress line with a gateway
+    // response embedded in it, wrapping onto following lines.
+    "Reconnecting... 2/5 (unexpected status 403 Forbidden: 19e9",
+    "unexpected status 403 Forbidden: <html>",
+    'Falling back from WebSockets to HTTPS transport. unexpected status 403 Forbidden: 19e9',
+  ];
+  for (const line of cases) {
+    const summary = summarize(FAIL_OUTCOME, ACC, null, line);
+    assert(summary.includes("no readable message"), `chatter must not pass through, got: ${summary}`);
+  }
+});
+
+test("execution-summary", "an HTML fragment inside a prose line is not prose", async () => {
+  const summarize = summarizer();
+  const cases = ["<html>", "<!DOCTYPE html>", "  <head>", "</div>", "body { margin: 0 } <body>"];
+  for (const line of cases) {
+    const summary = summarize(FAIL_OUTCOME, ACC, null, line);
+    assert(summary.includes("no readable message"), `mark-up must not pass through, got: ${summary}`);
+  }
 });
 
 test("execution-summary", "a genuine failure sentence does pass through", async () => {
@@ -113,6 +134,54 @@ test("execution-summary", "the wording is overridable, so a product can rephrase
   // exercises the base behaviour for every adapter either way.
   const adapter = new CodexHarnessAdapter();
   assertEqual(typeof adapter.summarize, "function", "subclasses must be able to override the wording");
+});
+
+/**
+ * Codex nests its failures: retry policy outside, cause in the middle, an
+ * entire gateway HTML page in the tail. Measured on a real run, the message
+ * for a blocked request is
+ *
+ *   Reconnecting... 2/5 (unexpected status 403 Forbidden: 19e9
+ *   <html>\n  <head>\n    <meta name="viewport" …
+ *
+ * `slice(0, 300)` of that, which is what the adapter used to forward, is a
+ * viewport meta tag. These cases pin the middle clause instead.
+ */
+test("execution-summary", "a nested transport failure yields its cause, not its wrapper", async () => {
+  const raw =
+    'Reconnecting... 2/5 (unexpected status 403 Forbidden: 19e9\r\n<html>\n  <head>\n' +
+    '    <meta name="viewport" content="width=device-width, initial-scale=1" />\n' +
+    "    <style global>body{font-family:Arial}</style>\n  </head>\n  <body>\n" +
+    "    <p>Unable to load site</p>\n  </body>\n</html>";
+  assertEqual(distillError(raw), "unexpected status 403 Forbidden", "the cause must be what survives");
+});
+
+test("execution-summary", "a bare status line is kept as-is", async () => {
+  assertEqual(
+    distillError("unexpected status 500 Internal Server Error"),
+    "unexpected status 500 Internal Server Error"
+  );
+  assertEqual(distillError("unexpected status 429 Too Many Requests"), "unexpected status 429 Too Many Requests");
+});
+
+test("execution-summary", "prose with no status clause passes through, minus any payload", async () => {
+  assertEqual(distillError("stream error: connection reset"), "stream error: connection reset");
+  assertEqual(
+    distillError("model unavailable\n<html><body>oops</body></html>"),
+    "model unavailable",
+    "a tail payload must be cut even when the head is prose"
+  );
+});
+
+test("execution-summary", "an entirely unreadable failure says so", async () => {
+  const out = distillError("<html><head></head><body>blocked</body></html>");
+  assert(out.includes("no readable message"), `expected a stated gap, got: ${out}`);
+  assertEqual(distillError("   ").includes("no readable message"), true, "blank input is a stated gap too");
+});
+
+test("execution-summary", "a distilled error fits the protocol's error budget", async () => {
+  const out = distillError("x".repeat(2000));
+  assert(out.length <= 300, `error text must stay bounded, got ${out.length}`);
 });
 
 await report();

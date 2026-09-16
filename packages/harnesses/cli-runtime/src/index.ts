@@ -338,18 +338,24 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
 /**
  * A line worth showing a human, or null.
  *
- * Rejects the two shapes that look like content but are not: the middle of a
- * JSON object (starts with `{` / `,` / `"`), and a mark-up fragment such as
- * the HTML error page a gateway returns. Either would otherwise travel to the
- * Brain as the "summary" of a failed run.
+ * Rejects the shapes that look like content and are not. A failing CLI is
+ * chatty: it retries, falls back between transports, and prints whatever the
+ * far end returned — which for a gateway is often an HTML page. None of that
+ * answers "why did this fail?" better than the exit code already does.
  */
 function meaningfulLine(line: string): string | null {
   const text = line.trim();
   if (text === "") return null;
+  // The middle of a JSON object.
   if (/^[{[,"]/.test(text)) return null;
+  // Mark-up, at the start or anywhere in a line that is mostly tags.
   if (/^<\/?[a-z!]/i.test(text)) return null;
-  // Bare status fragments ("Reconnecting... 2/5 (…") carry no decision value.
-  if (/^Reconnecting\.\.\./i.test(text)) return null;
+  if (/<html|<!doctype|<head>|<body>/i.test(text)) return null;
+  // Retry and transport chatter — includes the embedded-error variant, where
+  // the harness wraps a gateway response inside its own progress message.
+  if (/reconnecting/i.test(text)) return null;
+  // A wrapped status line: "… unexpected status 403 Forbidden …".
+  if (/unexpected status \d{3}/i.test(text)) return null;
   return text;
 }
 

@@ -157,13 +157,12 @@ export class CodexHarnessAdapter extends CliHarnessAdapter {
     if (!json) {
       const clean = stripAnsi(line).trim();
       return clean === "" ? null : { type: "log", at, message: clean.slice(0, 500) };
-    }
-    const type = typeof json.type === "string" ? json.type : "";
+    }    const type = typeof json.type === "string" ? json.type : "";
     if (type === "error" || type === "turn.failed") {
       return {
         type: "failed",
         at,
-        error: { code: "ExecutionFailed", message: String(json.message ?? json.error ?? line).slice(0, 300) },
+        error: { code: "ExecutionFailed", message: distillError(String(json.message ?? json.error ?? line)) },
       };
     }
     if (type === "item.completed") {
@@ -180,3 +179,33 @@ export class CodexHarnessAdapter extends CliHarnessAdapter {
 export function createCodexHarness(): CodexHarnessAdapter {
   return new CodexHarnessAdapter();
 }
+
+/**
+ * Reduce Codex's error text to the part that identifies the problem.
+ *
+ * Codex nests its failures inside progress narration: a transport error reads
+ * `Reconnecting... 2/5 (unexpected status 403 Forbidden: 19e9\r\n<html>…`,
+ * where the outer sentence is the retry policy, the middle is the cause, and
+ * the tail is an entire HTML error page from the gateway. The field a
+ * reviewing Brain reads first should carry the middle.
+ *
+ * So the payload is cut at the first tag, an inner `unexpected status` clause
+ * is preferred over the wrapper that contains it, whitespace collapses, and
+ * the result is bounded. If nothing survives, say so rather than forwarding
+ * debris.
+ */
+function distillError(raw: string): string {
+  const withoutMarkup = stripAnsi(raw).split(/<[a-zA-Z!/]/)[0] ?? "";
+  const flattened = withoutMarkup.replace(/\s+/g, " ").trim();
+
+  // "… (unexpected status 403 Forbidden: 19e9" — keep the cause, drop the
+  // retry wrapper and the trailing correlation id.
+  const status = /unexpected status ([^:)]+)/i.exec(flattened);
+  if (status?.[1]) return `unexpected status ${status[1].trim()}`.slice(0, 300);
+
+  const trimmed = flattened.replace(/[\s:;,-]+$/, "");
+  if (trimmed === "") return "Codex reported a failure with no readable message.";
+  return trimmed.slice(0, 300);
+}
+
+export const __test__ = { distillError };
