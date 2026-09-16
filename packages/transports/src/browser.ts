@@ -11,6 +11,8 @@
  *   - CAPTCHA / 2FA / security confirmations are surfaced as
  *     USER_ACTION_REQUIRED and never automated around
  */
+import { createRequire } from "node:module";
+
 export interface BrowserSelectors {
   /** Input box the adapter types the control message into. */
   composer: string;
@@ -62,11 +64,18 @@ export interface BrowserCapabilityProbe {
  * importing it. Playwright is an optional peer dependency: Agent2LLM must
  * install and run fine without it, simply reporting the Brain as
  * `implemented / detected:false`.
+ *
+ * `createRequire` is not optional here. This package ships as ESM, where the
+ * bare `require` binding does not exist: calling `require.resolve` directly
+ * threw a ReferenceError that this try/catch swallowed, so the probe answered
+ * `installed:false` even with Playwright fully installed — and every Web Brain
+ * silently fell back to the manual transport.
  */
+const requireFromTransports = createRequire(import.meta.url);
+
 export function probeBrowserModule(moduleName = "playwright"): BrowserCapabilityProbe {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require.resolve(moduleName);
+    requireFromTransports.resolve(moduleName);
     return { installed: true, kind: moduleName };
   } catch (error) {
     return {
