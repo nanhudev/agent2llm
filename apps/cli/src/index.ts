@@ -78,6 +78,7 @@ function usage(): void {
   ui.line(ui.bold("  Usage"));
   ui.line(`    ${CLI_NAME}                       interactive launcher`);
   ui.line(`    ${CLI_NAME} run --brain X --harness Y [--goal G] [--endpoint URL]`);
+  ui.line(ui.dim("      [--ignore-auth] [--dry-run] [--max-iterations N] [--session ID]"));
   ui.line(`    ${CLI_NAME} setup [--brain X] [--harness Y] [--tunnel]`);
   ui.line(`    ${CLI_NAME} detect [--json]`);
   ui.line(`    ${CLI_NAME} doctor [--json]`);
@@ -95,6 +96,7 @@ function usage(): void {
   ui.line(ui.dim("  Web Brains attach to a window you already have open when one exposes"));
   ui.line(ui.dim("  a DevTools port (--endpoint, or AGENT2LLM_ATTACH_ENDPOINT); otherwise"));
   ui.line(ui.dim("  they launch their own browser, and fall back to manual last."));
+  ui.line(ui.dim("  --ignore-auth runs even when an adapter measured that it is not signed in."));
   ui.line();
 }
 
