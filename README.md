@@ -123,7 +123,7 @@ msedge --remote-debugging-port=9222 --user-data-dir=%LOCALAPPDATA%\a2l-window
 Then confirm it is seen and run:
 
 ```bash
-agent2llm detect                       # 'Window attach' should say PASS
+agent2llm doctor                       # the 'Window attach' check should say PASS
 agent2llm run --brain chatgpt-web --harness workbuddy \
   --goal "Add a README badge" \
   --endpoint http://127.0.0.1:9222
