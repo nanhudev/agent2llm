@@ -76,7 +76,7 @@ function usage(): void {
   ui.line(BANNER);
   ui.line(ui.bold("  Usage"));
   ui.line(`    ${CLI_NAME}                       interactive launcher`);
-  ui.line(`    ${CLI_NAME} run --brain X --harness Y [--goal G]`);
+  ui.line(`    ${CLI_NAME} run --brain X --harness Y [--goal G] [--endpoint URL]`);
   ui.line(`    ${CLI_NAME} setup [--brain X] [--harness Y] [--tunnel]`);
   ui.line(`    ${CLI_NAME} detect [--json]`);
   ui.line(`    ${CLI_NAME} doctor [--json]`);
@@ -89,6 +89,10 @@ function usage(): void {
   ui.line(`    ${CLI_NAME} version`);
   ui.line();
   ui.line(ui.dim("  Global flags: --json  --verbose  --debug  --help"));
+  ui.line();
+  ui.line(ui.dim("  Web Brains attach to a window you already have open when one exposes"));
+  ui.line(ui.dim("  a DevTools port (--endpoint, or AGENT2LLM_ATTACH_ENDPOINT); otherwise"));
+  ui.line(ui.dim("  they launch their own browser, and fall back to manual last."));
   ui.line();
 }
 
@@ -190,6 +194,7 @@ async function main(): Promise<number> {
           ...(str(flags.goal) ? { goal: str(flags.goal) } : {}),
           ...(str(flags.session) ? { session: str(flags.session) } : {}),
           ...(str(flags["max-iterations"]) ? { maxIterations: Number.parseInt(str(flags["max-iterations"])!, 10) } : {}),
+          ...(str(flags.endpoint) ? { endpoint: str(flags.endpoint) } : {}),
           json,
           verbose,
           dryRun: bool(flags["dry-run"]),

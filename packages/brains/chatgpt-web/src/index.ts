@@ -26,12 +26,15 @@ import {
   type VerificationResult,
 } from "@agent2llm/adapter-sdk";
 import { AuthStore } from "@agent2llm/auth";
-import { probeBrowserModule } from "@agent2llm/transports";
+import { probeBrowserModule, probeDesktopApp } from "@agent2llm/transports";
 import {
   WebBrainSession,
+  asTransportMode,
   clearWebRef,
   loadWebRef,
-  resolveTransportMode,
+  selectTransport,
+  type WebBrainConfig,
+  type WebTransportMode,
 } from "@agent2llm/brain-web-runtime";
 import { buildChatGPTBootPrompt, buildTurnReminder } from "./boot-prompt.js";
 import { CHATGPT_SELECTORS, CHATGPT_URLS, isConversationUrl } from "./selectors.js";
@@ -40,7 +43,7 @@ interface SessionState {
   driver: WebBrainSession;
   booted: boolean;
   url: string;
-  mode: "playwright" | "manual";
+  mode: WebTransportMode;
 }
 
 const sessions = new Map<string, SessionState>();
@@ -60,10 +63,20 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
 
   async detect(ctx: DetectContext = {}): Promise<DetectionResult> {
     const saved = loadWebRef("chatgpt-web");
-    const browser = probeBrowserModule();
-    const notes: string[] = [];
-    if (!browser.installed) {
-      notes.push("Playwright is not installed; the manual transport will be used.");
+    const [selection, desktop] = await Promise.all([
+      selectTransport(),
+      probeDesktopApp(),
+    ]);
+    const notes: string[] = [selection.reason];
+    if (desktop.installed) {
+      notes.push(
+        `ChatGPT desktop is installed${desktop.running === true ? " and running" : ""}: ${desktop.executables[0]}`
+      );
+    }
+    if (selection.mode === "manual") {
+      notes.push(
+        "Install Playwright, or leave a Chromium window open with a DevTools port, to automate this Brain."
+      );
     }
     if (!saved) {
       return {
@@ -84,7 +97,13 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
 
   async buildCapabilities(): Promise<CapabilityManifest> {
     const browser = probeBrowserModule();
-    const base = withCapabilities(emptyManifest(browser.installed ? "browser" : "manual"), [
+    const [selection, desktop] = await Promise.all([
+      selectTransport(),
+      probeDesktopApp(),
+    ]);
+    const transport: CapabilityManifest["transport"] =
+      selection.mode === "cdp" ? "cdp" : selection.mode === "playwright" ? "browser" : "manual";
+    const base = withCapabilities(emptyManifest(transport), [
       "session.create",
       "session.attach",
       "session.resume",
@@ -102,7 +121,7 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
     return {
       ...base,
       experimental: true,
-      transport: browser.installed ? "browser" : "manual",
+      transport,
       // No native JSON mode over the chat UI: control messages are parsed
       // from a strict text block. That is a real limitation, declared here.
       capabilities: {
@@ -118,11 +137,16 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
         "Control messages are parsed from a text block typed in the chat UI; no native structured-output channel.",
         "DOM selectors are version-sensitive and may need updating when ChatGPT changes its UI.",
         "Login, CAPTCHA and 2FA must be completed by the human in the official interface.",
+        "Whether a particular desktop build accepts a DevTools port is per-build, and is settled by trying it rather than by this manifest.",
       ],
       auth: { required: true, authenticated: false, method: "official web login + OAuth 2.1 MCP pairing" },
       facts: {
         playwrightInstalled: browser.installed,
-        transport: browser.installed ? "browser" : "manual",
+        transport,
+        transportReason: selection.reason,
+        desktopAppInstalled: desktop.installed,
+        desktopAppRunning: desktop.running === null ? "unknown" : desktop.running,
+        ...(selection.endpoint ? { attachEndpoint: selection.endpoint } : {}),
       },
     };
   }
@@ -157,29 +181,28 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
     };
   }
 
+  /**
+   * One definition of this Brain's web profile. Create, attach and revive must
+   * all describe the same Brain, so it is written down once.
+   */
+  private config(): WebBrainConfig {
+    return {
+      adapterId: "chatgpt-web",
+      displayName: "ChatGPT",
+      newConversationUrl: CHATGPT_URLS.newChat,
+      conversationUrlPrefix: CHATGPT_URLS.base,
+      connectorUrl: CHATGPT_URLS.connectors,
+      selectors: CHATGPT_SELECTORS,
+    };
+  }
+
   async createSession(ctx: BrainSessionContext): Promise<BrainSession> {
-    const mode = resolveTransportMode(
-      {
-        adapterId: "chatgpt-web",
-        displayName: "ChatGPT",
-        newConversationUrl: CHATGPT_URLS.newChat,
-        conversationUrlPrefix: CHATGPT_URLS.base,
-        connectorUrl: CHATGPT_URLS.connectors,
-        selectors: CHATGPT_SELECTORS,
-      },
-      undefined
-    );
-    const driver = new WebBrainSession(
-      {
-        adapterId: "chatgpt-web",
-        displayName: "ChatGPT",
-        newConversationUrl: CHATGPT_URLS.newChat,
-        conversationUrlPrefix: CHATGPT_URLS.base,
-        connectorUrl: CHATGPT_URLS.connectors,
-        selectors: CHATGPT_SELECTORS,
-      },
-      mode
-    );
+    // Prefer a window the user already has open. See selectTransport.
+    const selection = await selectTransport();
+    const driver = new WebBrainSession(this.config(), {
+      mode: selection.mode,
+      ...(selection.endpoint ? { endpoint: selection.endpoint } : {}),
+    });
     const ref = await driver.open(CHATGPT_URLS.newChat);
     await driver.send(
       buildChatGPTBootPrompt({
@@ -203,25 +226,21 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
 
   async attachSession(checkpoint: BrainCheckpoint): Promise<BrainSession> {
     const url = typeof checkpoint.ref.url === "string" ? checkpoint.ref.url : CHATGPT_URLS.newChat;
-    const mode = checkpoint.ref.mode === "manual" ? "manual" : "playwright";
-    const driver = new WebBrainSession(
-      {
-        adapterId: "chatgpt-web",
-        displayName: "ChatGPT",
-        newConversationUrl: CHATGPT_URLS.newChat,
-        conversationUrlPrefix: CHATGPT_URLS.base,
-        connectorUrl: CHATGPT_URLS.connectors,
-        selectors: CHATGPT_SELECTORS,
-      },
-      mode
-    );
+    const mode = asTransportMode(checkpoint.ref.mode);
+    const endpoint = typeof checkpoint.ref.endpoint === "string" ? checkpoint.ref.endpoint : undefined;
+    const driver = new WebBrainSession(this.config(), { mode, ...(endpoint ? { endpoint } : {}) });
     await driver.attach({
       mode,
       url,
+      ...(endpoint ? { endpoint } : {}),
       lastMessage: "",
       savedAt: checkpoint.savedAt,
     });
-    return { id: checkpoint.adapterId, adapterId: "chatgpt-web", ref: { url, mode } };
+    return {
+      id: checkpoint.adapterId,
+      adapterId: "chatgpt-web",
+      ref: { url, mode, ...(endpoint ? { endpoint } : {}) },
+    };
   }
 
   async sendControl(session: BrainSession, message: ControlMessage): Promise<void> {
@@ -289,18 +308,9 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
     const state = sessions.get(session.id);
     if (!state) {
       // Reconstruct from ref so a restarted process can still send/receive.
-      const mode = session.ref.mode === "manual" ? "manual" : "playwright";
-      const driver = new WebBrainSession(
-        {
-          adapterId: "chatgpt-web",
-          displayName: "ChatGPT",
-          newConversationUrl: CHATGPT_URLS.newChat,
-          conversationUrlPrefix: CHATGPT_URLS.base,
-          connectorUrl: CHATGPT_URLS.connectors,
-          selectors: CHATGPT_SELECTORS,
-        },
-        mode
-      );
+      const mode = asTransportMode(session.ref.mode);
+      const endpoint = typeof session.ref.endpoint === "string" ? session.ref.endpoint : undefined;
+      const driver = new WebBrainSession(this.config(), { mode, ...(endpoint ? { endpoint } : {}) });
       const created: SessionState = {
         driver,
         booted: true,

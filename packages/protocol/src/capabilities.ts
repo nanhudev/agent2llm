@@ -67,7 +67,7 @@ export type AuthState = z.infer<typeof authStateSchema>;
 
 export const capabilityManifestSchema = z.object({
   capabilities: z.record(z.string(), capabilityDescriptorSchema),
-  transport: z.enum(["browser", "subprocess", "stdio", "rpc", "manual", "http", "in-process"]),
+  transport: z.enum(["browser", "cdp", "subprocess", "stdio", "rpc", "manual", "http", "in-process"]),
   /** Adapter-reported version of the underlying product, if any. */
   version: z.string().max(60).optional(),
   limitations: z.array(z.string().max(300)).max(30).default([]),

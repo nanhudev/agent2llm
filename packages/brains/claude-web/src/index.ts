@@ -24,9 +24,10 @@ import { AuthStore } from "@agent2llm/auth";
 import { probeBrowserModule, type BrowserSelectors } from "@agent2llm/transports";
 import {
   WebBrainSession,
+  asTransportMode,
   clearWebRef,
   loadWebRef,
-  resolveTransportMode,
+  selectTransport,
 } from "@agent2llm/brain-web-runtime";
 
 export const CLAUDE_URLS = {
@@ -68,9 +69,13 @@ export class ClaudeWebBrain extends BaseBrainAdapter {
 
   async detect(_ctx: DetectContext = {}): Promise<DetectionResult> {
     const saved = loadWebRef("claude-web");
-    const browser = probeBrowserModule();
-    const notes: string[] = [];
-    if (!browser.installed) notes.push("Playwright is not installed; the manual transport will be used.");
+    const selection = await selectTransport();
+    const notes: string[] = [selection.reason];
+    if (selection.mode === "manual") {
+      notes.push(
+        "Install Playwright, or leave a Chromium window open with a DevTools port, to automate this Brain."
+      );
+    }
     if (!saved) {
       return {
         status: "implemented",
@@ -83,7 +88,10 @@ export class ClaudeWebBrain extends BaseBrainAdapter {
 
   async buildCapabilities(): Promise<CapabilityManifest> {
     const browser = probeBrowserModule();
-    const base = withCapabilities(emptyManifest(browser.installed ? "browser" : "manual"), [
+    const selection = await selectTransport();
+    const transport: CapabilityManifest["transport"] =
+      selection.mode === "cdp" ? "cdp" : selection.mode === "playwright" ? "browser" : "manual";
+    const base = withCapabilities(emptyManifest(transport), [
       "session.create",
       "session.attach",
       "session.resume",
@@ -99,7 +107,7 @@ export class ClaudeWebBrain extends BaseBrainAdapter {
     ]);
     return {
       ...base,
-      transport: browser.installed ? "browser" : "manual",
+      transport,
       experimental: true,
       capabilities: {
         ...base.capabilities,
@@ -118,7 +126,11 @@ export class ClaudeWebBrain extends BaseBrainAdapter {
         "DOM selectors are version-sensitive.",
       ],
       auth: { required: true, authenticated: false, method: "official web login + MCP connector" },
-      facts: { playwrightInstalled: browser.installed },
+      facts: {
+        playwrightInstalled: browser.installed,
+        transport,
+        transportReason: selection.reason,
+      },
     };
   }
 
@@ -143,19 +155,25 @@ export class ClaudeWebBrain extends BaseBrainAdapter {
   }
 
   async createSession(ctx: BrainSessionContext): Promise<BrainSession> {
-    const mode = resolveTransportMode(CONFIG);
-    const driver = new WebBrainSession(CONFIG, mode);
+    // Prefer a window the user already has open. See selectTransport.
+    const selection = await selectTransport();
+    const driver = new WebBrainSession(CONFIG, {
+      mode: selection.mode,
+      ...(selection.endpoint ? { endpoint: selection.endpoint } : {}),
+    });
     const ref = await driver.open(CLAUDE_URLS.newChat);
     sessions.set(ctx.sessionId, driver);
     return { id: ctx.sessionId, adapterId: "claude-web", ref: { url: ref.url, mode: ref.mode } };
   }
 
   async attachSession(checkpoint: BrainCheckpoint): Promise<BrainSession> {
-    const mode = checkpoint.ref.mode === "manual" ? "manual" : "playwright";
-    const driver = new WebBrainSession(CONFIG, mode);
+    const mode = asTransportMode(checkpoint.ref.mode);
+    const endpoint = typeof checkpoint.ref.endpoint === "string" ? checkpoint.ref.endpoint : undefined;
+    const driver = new WebBrainSession(CONFIG, { mode, ...(endpoint ? { endpoint } : {}) });
     await driver.attach({
       mode,
       url: String(checkpoint.ref.url ?? CLAUDE_URLS.newChat),
+      ...(endpoint ? { endpoint } : {}),
       lastMessage: "",
       savedAt: checkpoint.savedAt,
     });

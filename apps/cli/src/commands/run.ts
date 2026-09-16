@@ -11,6 +11,7 @@ import { Logger } from "@agent2llm/logger";
 import { SessionStore } from "@agent2llm/session";
 import { Workspace, WorkspaceRegistry } from "@agent2llm/workspace";
 import { createInProcessDataPlane } from "@agent2llm/mcp";
+import { ATTACH_ENDPOINT_ENV } from "@agent2llm/transports";
 import { Orchestrator } from "@agent2llm/orchestrator";
 import { A2LError, isA2LError, toA2LError } from "@agent2llm/core";
 import { formatEventHuman } from "@agent2llm/core";
@@ -27,9 +28,17 @@ export interface RunOptions {
   verbose?: boolean;
   dryRun?: boolean;
   maxIterations?: number;
+  /**
+   * DevTools endpoint of a window to drive, e.g. `http://127.0.0.1:9222`.
+   * Only meaningful for Web Brains; ignored by the API and mock ones.
+   */
+  endpoint?: string;
 }
 
 export async function runRun(registry: AdapterRegistry, options: RunOptions): Promise<number> {
+  // Published through the environment because a Brain builds its own browser
+  // session, and a browser detail has no business travelling in the protocol.
+  if (options.endpoint) process.env[ATTACH_ENDPOINT_ENV] = options.endpoint;
   const config = loadMachineConfig();
   const brainId = options.brain ?? config.defaultBrain;
   const harnessId = options.harness ?? config.defaultHarness;

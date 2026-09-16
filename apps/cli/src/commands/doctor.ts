@@ -12,7 +12,7 @@ import { getStateDir, loadMachineConfig } from "@agent2llm/config";
 import { findBridgeObservation } from "@agent2llm/bridge";
 import { WorkspaceRegistry } from "@agent2llm/workspace";
 import { SessionStore } from "@agent2llm/session";
-import { probeBrowserModule } from "@agent2llm/transports";
+import { findAttachEndpoint, probeBrowserModule, probeDesktopApp } from "@agent2llm/transports";
 import * as ui from "../ui.js";
 import { registerExternalAdapters } from "../registry.js";
 
@@ -66,12 +66,33 @@ export async function runDoctor(
   });
 
   const browser = probeBrowserModule();
+  const attach = await findAttachEndpoint();
+  const desktop = await probeDesktopApp();
+
+  // Ordered by preference: attaching to a window the user already has open is
+  // the path Web Brains take when it is available, so it is reported first.
+  checks.push({
+    name: "Window attach",
+    result: attach ? "PASS" : "UNVERIFIED",
+    message: attach
+      ? `Attaching is available at ${attach.endpoint} (${attach.browser ?? "unknown engine"}).`
+      : `No DevTools endpoint answered. ${desktop.hint}`,
+  });
+
+  checks.push({
+    name: "ChatGPT desktop",
+    result: desktop.installed ? "PASS" : "UNVERIFIED",
+    message: desktop.installed
+      ? `${desktop.executables[0]}${desktop.running === true ? " (running)" : ""}`
+      : "Not installed. Install the official app, or keep an Edge/Chrome window open with a DevTools port.",
+  });
+
   checks.push({
     name: "Browser automation",
     result: browser.installed ? "PASS" : "UNVERIFIED",
     message: browser.installed
-      ? "Playwright is installed; web Brain automation is available."
-      : "Playwright is not installed. Web Brains fall back to the manual transport.",
+      ? "Playwright is installed; a browser can be launched when no window is there to attach to."
+      : "Playwright is not installed. Web Brains cannot launch a browser; the manual transport still works.",
     ...(browser.installed ? {} : { repair: "npm i -D playwright && npx playwright install chromium" }),
   });
 
