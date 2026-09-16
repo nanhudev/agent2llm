@@ -45,15 +45,20 @@ Rules that come with it:
 - Whether a particular desktop build accepts a debug flag cannot be known from
   outside. Detection reports what it observed and nothing more.
 - Discovery reads the port an engine recorded for itself (`DevToolsActivePort`)
-  before sweeping conventional ports. A packaged desktop build renders through
-  WebView2, whose flags come from `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` or the
-  matching policy key rather than from the app's own command line, and the value
-  may legitimately be `--remote-debugging-port=0` — a port chosen by the engine.
-  Guessing cannot reach that window; a file it wrote can.
+  before sweeping conventional ports. A build that lets the OS choose its port —
+  because it was started with `--remote-debugging-port=0`, or because its host
+  forwards flags through `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` instead of its
+  own command line — cannot be reached by guessing. A file it wrote can.
 - A profile file is not evidence by itself. It outlives its process, so the
   endpoint it names is probed exactly like a guessed one and skipped when nothing
-  answers. Trusting the file would resurrect the failure the probe rule exists to
-  prevent.
+  answers. A live process is identified by the `lockfile` beside the port file;
+  without one the file is a leftover and is reported as ignored. Trusting it
+  would resurrect the failure the probe rule exists to prevent.
+- Attachable is not drivable. A packaged desktop build may serve its own UI from
+  an `app://` scheme instead of loading the website, in which case CDP reaches
+  it and the website selectors do not. The transport records the scheme and the
+  Brain fails with a named error rather than waiting on a selector that cannot
+  appear.
 
 ## Consequences
 

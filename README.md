@@ -113,38 +113,36 @@ a window you can watch, it survives between CLI runs, and you never log in twice
 anything that exposes a DevTools port can be driven — the desktop build, or your
 own Edge/Chrome. There is no per-application adapter to maintain.
 
-### The desktop build is the better host
+### About the desktop build
 
-You are already signed in, the window outlives the CLI process, and nothing about
-it looks like automation. One catch: a packaged desktop build does not publish a
-port on its own, and it renders through **WebView2** rather than being its own
-Chromium, so the switch belongs to WebView2 rather than to the app.
+Measured on Windows against the official app (`OpenAI.Codex`, Start-menu name
+**ChatGPT**), so this is observation rather than inference:
 
-Set the flag for a single launch:
+- It is a **full Chromium**, not a WebView2 host. `--remote-debugging-port`
+  goes on the executable's own command line; no WebView2 variable is involved.
+  It answers `/json/version` as `Chrome/152.0.7977.83`.
+- It keeps its profile inside its MSIX package
+  (`…\Packages\OpenAI.Codex_…\LocalCache\Roaming\Codex\web\Codex`), which is why
+  port guessing alone does not find it and the profile file matters.
 
 ```powershell
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
-# then start the app the way you normally do
+& "C:\Program Files\WindowsApps\OpenAI.Codex_*\app\ChatGPT.exe" --remote-debugging-port=9222
 ```
 
-Or make it stick for that executable:
+Then `agent2llm doctor` reports `✓ Window attach`.
 
-```bat
-reg add "HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments" ^
-  /v ChatGPT.exe /t REG_SZ /d "--remote-debugging-port=9222" /f
-```
+**Attaching works. Driving the website does not.** The app renders its own
+interface at `app://-/index.html` — it does not embed `chatgpt.com`, and
+navigating that page elsewhere is refused. So the chat selectors, which describe
+the website, describe nothing here. This is why `chatgpt-web` refuses a session
+against a shell with an explanatory error instead of waiting for a composer that
+will never appear. Use the web app in a browser window for an automated Brain;
+attach to the desktop app only for the *other* Brains that talk to a
+conversation URL.
 
-Quit the app completely and start it again. `agent2llm doctor` should then report
-`✓ Window attach`.
-
-You do not have to pick the port. Chromium writes whichever port it bound into
-`DevToolsActivePort` in the app's profile, and the transport reads that file before
-it sweeps anything, so `--remote-debugging-port=0` works too — as does a port that
-changes between runs. Both the unpackaged layout (`%LOCALAPPDATA%\ChatGPT\EBWebView`)
-and the redirection a Microsoft Store package uses
-(`…\Packages\<package>\LocalCache\…\EBWebView`) are searched. A profile file whose
-process has exited is not treated as a window: nothing answers on it, so it is
-skipped like any other dead endpoint.
+That distinction is the honest answer to "can the desktop build be the primary
+driver?" — not yet. It can be attached to and read; it cannot be driven by the
+website selectors until someone writes selectors for its own DOM.
 
 ### Attaching to Edge or Chrome
 
@@ -166,16 +164,30 @@ agent2llm run --brain chatgpt-web --harness workbuddy \
 `--endpoint` is a shortcut for `AGENT2LLM_ATTACH_ENDPOINT`. With neither, ports
 named by a profile file are tried first, then 9222, 9223 and 9229.
 
+You do not have to pick the port. Chromium writes whichever port it bound into
+`DevToolsActivePort` in its profile, and the transport reads that file before it
+sweeps anything, so `--remote-debugging-port=0` works, as does a port that
+changes between runs. Both the ordinary layout and the several depths a Microsoft
+Store package redirects to are searched. A profile file whose process has exited
+is not treated as a window: nothing answers on it, so it is probed and skipped
+like any other dead endpoint.
+
+A profile directory is only reported as the app's when a process is holding it —
+a `lockfile` beside the port file. Without that check the app data root yields
+false positives, because it collects leftovers from other programs: on the
+machine this was developed on, an unrelated Edge profile sat at a path almost
+identical to the desktop app's.
+
 A port is only treated as attachable when `/json/version` answers on it and names
 the engine. An open socket is not evidence, and guessing turns "no window" into a
 confusing protocol error later. Detaching ends our session; it does not close the
 window, which `tests/cdp-attach.test.mjs` asserts.
 
-What has actually been exercised: attaching, a round trip, and surviving a detach,
-against an Edge 153 window started with an explicit port, and against a Chromium
-that bound a random port and announced it only through its profile file. What has
-not: a real ChatGPT or Claude desktop build, because none is installed on the
-machine this was written on.
+What has actually been exercised: attaching, a round trip, and surviving a
+detach, against an Edge 153 window started with an explicit port; against a
+Chromium that bound a random port and announced it only through its profile file;
+and against the official ChatGPT desktop build, where the attach, a DOM read of
+its real interface and the detach were all confirmed.
 
 ## Commands
 
@@ -231,9 +243,10 @@ Listed because they are real, not because they are interesting.
 - Nothing has been verified against a live ChatGPT or Claude account from this
   machine. The browser transport is verified up to a page loading; login, MCP
   pairing and a full turn are not.
-- The desktop build has not been tried here, because none is installed. The
-  WebView2 flag above is Microsoft's documented way to open a debug port in a
-  WebView2 host; it has not been confirmed against a specific release of the app.
+- The desktop build can be attached to and read, but not driven: it serves its
+  own interface from `app://` rather than loading `chatgpt.com`, so the website
+  selectors do not describe it. `chatgpt-web` refuses such a session explicitly
+  rather than waiting for a composer that will never appear.
 - Web Brains scrape a UI, so selectors break when the site changes. The selectors
   are in one file per Brain, on purpose.
 - `chatgpt.com` must be reachable. Cloudflare answers a headless Chromium with

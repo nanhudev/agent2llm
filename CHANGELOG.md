@@ -18,10 +18,18 @@ All notable changes are documented here. Format follows
   when one actually answered.
 - **Profile-based port discovery.** A window that never announced its port is
   found by reading `DevToolsActivePort` from the app's profile before sweeping
-  conventional ports. This is what reaches a packaged desktop build, whose engine
-  is WebView2 and may be started with `--remote-debugging-port=0`; both the
-  unpackaged and the Microsoft Store redirected profile layouts are searched. A
-  stale file left behind by an exited process is probed and skipped, not trusted.
+  conventional ports. This is what reaches a packaged desktop build started with
+  `--remote-debugging-port=0`, where the OS picks the port; the unpackaged,
+  WebView2 and Microsoft Store redirected profile layouts are all searched,
+  including the extra `Roaming\Codex\web\Codex` nesting the ChatGPT app uses.
+- **Profile ownership test.** A `DevToolsActivePort` file is only trusted when a
+  `lockfile` sits beside it — that is what a live process leaves. A file with no
+  lockfile is a leftover from an exited run and is reported as ignored rather
+  than probed, which stops an unrelated profile from being mistaken for the app.
+- **Application-shell detection.** A desktop build that serves its own UI from
+  `app://` is recognised as a shell, not a web page. `chatgpt-web` refuses such a
+  session with an error naming the cause instead of waiting for a composer that
+  will never render.
 - `agent2llm doctor` reports `Window attach` and `ChatGPT desktop` separately
   from browser automation, in that order. The desktop check names the profile it
   found and, when the app publishes no port, the switch that makes it.
@@ -30,6 +38,9 @@ All notable changes are documented here. Format follows
 - `tests/devtools-active-port.test.mjs` covers profile discovery against both
   layouts, malformed and empty files, unrelated profile directories, and a stale
   file whose process has exited.
+- `tests/desktop-app.test.mjs` covers the application-shell classification: an
+  `app://` window is not a web page, its host is not the target host, and a
+  running app that publishes no port does not select `cdp`.
 
 ### Fixed
 
@@ -54,6 +65,13 @@ All notable changes are documented here. Format follows
   what has not been verified.
 - `docs/architecture/browser-transport.md` corrected — it documented a
   `NoBrowserTransport` that never existed in the code.
+- **Desktop-build claims replaced with measurements.** The ChatGPT Windows app
+  (`OpenAI.Codex`) is a full Chromium, not a WebView2 host, so
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` is not the switch that opens its debug
+  port — the flag goes on the executable's own command line. It is attachable and
+  readable, but its UI is served from `app://` rather than `chatgpt.com`, so it
+  cannot be driven by the website selectors. The manifest limitation, the
+  transport and both READMEs now say that instead of the earlier guess.
 
 ## [0.1.0] — 2026-09-16
 

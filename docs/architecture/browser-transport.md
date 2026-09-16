@@ -54,12 +54,23 @@ user-data directory, which is the mechanism this project reads:
 Only line one is used. The HTTP endpoint derived from it behaves exactly like one
 written by hand, and `connectOverCDP` accepts either form.
 
-This matters most for a **WebView2 host**, which is what packaged desktop builds
-are. There is no `--remote-debugging-port` argument to pass to the app itself:
-the engine reads its flags from `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` or from
-`HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments`, and
-the value may legitimately be `--remote-debugging-port=0`, in which case the port
-is only knowable from the profile file.
+This matters most for a build that binds a port of its own choosing — anything
+started with `--remote-debugging-port=0`, and any engine whose host appends a
+directory the caller did not name. Two shapes are supported because both occur in
+the wild:
+
+- A **WebView2 host** has no `--remote-debugging-port` argument on the app's own
+  command line. Its engine reads flags from
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` or from
+  `HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments`,
+  and the value may legitimately be `--remote-debugging-port=0`.
+- A **full-Chromium build** takes the flag on its own command line, and the app
+  is free to pass `=0` and let the OS choose.
+
+In both cases the port is only knowable from the profile file. Which shape a given
+desktop build has is not guessable from outside — the ChatGPT Windows app turned
+out to be the second, against an earlier assumption that it was the first — so
+discovery reads the file rather than reasoning about the host.
 
 `devToolsActivePortPaths()` lists candidate files rather than assuming a layout.
 Windows moves these around: an unpackaged app writes to
@@ -74,6 +85,27 @@ window: the endpoint is probed like any other, nothing answers, and the sweep
 continues. The alternative — trusting the file — would report a dead port as
 attachable, which is precisely the failure the `/json/version` rule exists to
 prevent.
+
+A live process leaves a `lockfile` in the profile directory it holds, next to the
+port file. That is the test used to tell a running window from a leftover: a port
+file without a `lockfile` beside it is reported as ignored, not probed. Without
+it, an unrelated profile sitting at a similar path was picked up as the app —
+which is exactly what happened on the development machine, where an Edge profile
+under `%LOCALAPPDATA%\ChatGPT\EBWebView\` was left over from an earlier run.
+
+## Attaching is not driving
+
+A packaged desktop build may not be a browser window at all. The ChatGPT app
+serves its interface from `app://-/index.html`: it renders its own UI in Chromium
+and never loads `chatgpt.com`. It attaches cleanly over CDP and its DOM is
+readable, but a selector written against the website does not describe it, and it
+refuses navigation (`ERR_ABORTED`).
+
+The transport records the scheme it landed on, and `web-runtime` raises that as a
+named error instead of waiting for a composer that will never render. The honest
+summary is that the desktop build is attachable and readable but not drivable
+with website selectors; a Brain that needs to drive the UI uses the web app in a
+browser window.
 
 Discovery runs before the port sweep: a port an engine recorded itself is
 evidence, a port we guessed is a hunch.

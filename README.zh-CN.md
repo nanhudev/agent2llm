@@ -109,34 +109,31 @@ ChatGPT 和 Claude 这两个 Web Brain 需要一个浏览器。这一环最容�
 Chromium 窗口都能接管——桌面版可以，你自己的 Edge/Chrome 也可以。没有 per-app 适配器
 要维护。
 
-### 桌面版才是更合适的宿主
+### 关于桌面版
 
-你本来就登录着，窗口比 CLI 进程活得久，而且它看起来完全不像自动化。但有个前提：打包的
-桌面版自己不会开调试端口，而且它用的是 **WebView2** 渲染、本身不是一个 Chromium，所以这
-个开关归 WebView2 管，不归应用管。
+在 Windows 上对着官方应用实测过（包名 `OpenAI.Codex`，开始菜单里叫
+**ChatGPT**），下面是观察到的结果，不是推测：
 
-单次生效：
+- 它是**完整的 Chromium**，不是 WebView2 宿主。`--remote-debugging-port` 直接加在
+  可执行文件自己的命令行上，和 WebView2 的环境变量无关。`/json/version` 报的是
+  `Chrome/152.0.7977.83`。
+- 它的 profile 在自己的 MSIX 包里面
+  （`…\Packages\OpenAI.Codex_…\LocalCache\Roaming\Codex\web\Codex`），所以光靠猜端口
+  找不到它，读 profile 文件才有用。
 
 ```powershell
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
-# 然后按你平时的习惯启动应用
+& "C:\Program Files\WindowsApps\OpenAI.Codex_*\app\ChatGPT.exe" --remote-debugging-port=9222
 ```
 
-或者让这个可执行文件永久带上：
+之后 `agent2llm doctor` 会显示 `✓ Window attach`。
 
-```bat
-reg add "HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments" ^
-  /v ChatGPT.exe /t REG_SZ /d "--remote-debugging-port=9222" /f
-```
+**接管能成，但驱动网页不行。** 应用把界面渲染在 `app://-/index.html`——它并不嵌
+`chatgpt.com`，而且不允许把这个页面导航走。所以描述网页版的那套选择器在它身上什么也描述
+不了。因此 `chatgpt-web` 遇到这种应用外壳会明确报错，而不是一直等一个永远不会出现
+的输入框。要跑自动化的 Brain，请用浏览器窗口里的网页版；桌面版只适合"接管并读"。
 
-完全退出应用再重新打开，`agent2llm doctor` 就会显示 `✓ Window attach`。
-
-端口不用你自己挑。Chromium 会把它实际绑定的端口写进应用 profile 里的
-`DevToolsActivePort`，transport 在扫端口之前先读这个文件，所以
-`--remote-debugging-port=0` 也能用——每次运行端口都变也没关系。非打包布局
-（`%LOCALAPPDATA%\ChatGPT\EBWebView`）和微软商店包被重定向后的布局
-（`…\Packages\<包名>\LocalCache\…\EBWebView`）都会找。如果 profile 文件在、但进程已经退
-出，它不会被当成一个窗口：上面没人应答，就和其它死端口一样跳过。
+这就是"桌面版能不能当主力"的诚实答案——**还不能**。它能被接管、被读取，但在有人为它自己
+的 DOM 写一套选择器之前，网页版的选择器驱动不了它。
 
 ### 接管 Edge 或 Chrome
 
@@ -158,13 +155,23 @@ agent2llm run --brain chatgpt-web --harness workbuddy \
 `--endpoint` 是 `AGENT2LLM_ATTACH_ENDPOINT` 的快捷写法。两个都不给时，先试 profile 文件
 点名的端口，再试 9222、9223、9229。
 
+端口不用你自己挑。Chromium 会把它实际绑定的端口写进 profile 里的
+`DevToolsActivePort`，transport 在扫端口之前先读这个文件，所以
+`--remote-debugging-port=0` 也能用——每次运行端口都变也没关系。普通布局和微软商店包被重
+定向后的几种层级都会找。如果 profile 文件在、但进程已经退出，它不会被当成一个窗口：上面
+没人应答，就和其它死端口一样探测后被跳过。
+
+一个 profile 目录只有在**有进程正持有它**时才会被认成这个应用的——判据是端口文件旁边的
+`lockfile`。少了这道检查，app data 根目录会给出假阳性，因为它会攒下别的程序的残留：开发
+这台机器上就有一个不相干的 Edge profile 待在和桌面版几乎一样的路径下。
+
 只有 `/json/version` 应答并且报出引擎名，才会被当成可接管。端口开着不算证据——随便什么
 进程都能占着端口，靠猜会把"没有窗口"变成后面一个莫名其妙的协议错误。断开只结束我们的
 会话，不关窗口，`tests/cdp-attach.test.mjs` 里有这条断言。
 
-真正跑过的部分：接管、一轮往返、断开后窗口存活——对象是一个显式指定端口的 Edge 153 窗口，
-以及一个随机绑定端口、只通过 profile 文件对外声明的 Chromium。没跑过的部分：真实的
-ChatGPT / Claude 桌面版，写这份文档的机器上没有装。
+真正跑过的部分：接管、一轮往返、断开后窗口存活——对象是一个显式指定端口的 Edge 153 窗口、
+一个随机绑定端口且只通过 profile 文件对外声明的 Chromium，以及**官方 ChatGPT 桌面版**（接
+管、读到它真实界面的 DOM、断开，三步都确认过）。
 
 ## 命令
 
@@ -214,8 +221,9 @@ provider 的 tool calling 去调。没有数据平面时它直接声明自己没
 - 只有 `mock-brain` × `mock-harness` 这一对跑通过端到端。其余是契约测试 + dry-run。
 - 没有对真实的 ChatGPT / Claude 账号验证过任何东西。浏览器链路只验证到"页面加载成功"
   这一步，登录、MCP 配对、完整一轮对话都没验证。
-- 桌面版没试过，因为本机没装。上面那个 WebView2 参数是微软官方给的开启 WebView2 宿主调
-  试端口的方式，但没有对着某个具体版本的 ChatGPT 应用验证过。
+- 桌面版能接管、能读，但驱动不了：它从 `app://` 走自己的界面，不加载 `chatgpt.com`，
+  所以站方选择器描述不到它。`chatgpt-web` 撞上这种会话会直接报错，而不是干等一个永远
+  不会出现的输入框。
 - Web Brain 是抓 UI 的，站方改版选择器就会失效。每个 Brain 的选择器集中在一个文件里，
   这是故意的。
 - `chatgpt.com` 必须可达。Cloudflare 对 headless Chromium 回 403；transport 跑有头
