@@ -76,15 +76,27 @@ export async function runDoctor(
     result: attach ? "PASS" : "UNVERIFIED",
     message: attach
       ? `Attaching is available at ${attach.endpoint} (${attach.browser ?? "unknown engine"}).`
-      : `No DevTools endpoint answered. ${desktop.hint}`,
+      : "No DevTools endpoint answered. Web Brains will launch their own browser instead.",
+    ...(attach
+      ? {}
+      : {
+          repair:
+            "Start a Chromium window with a debug port — msedge --remote-debugging-port=9222, or chrome --remote-debugging-port=9222. For the packaged app, see the 'ChatGPT desktop' check.",
+        }),
   });
+
+  const runningLabel =
+    desktop.running === true ? " (running)" : desktop.running === false ? " (not running)" : "";
+  const profileLabel =
+    desktop.profileFiles.length > 0 ? ` · profile ${desktop.profileFiles[0]}` : "";
 
   checks.push({
     name: "ChatGPT desktop",
     result: desktop.installed ? "PASS" : "UNVERIFIED",
     message: desktop.installed
-      ? `${desktop.executables[0]}${desktop.running === true ? " (running)" : ""}`
+      ? `${desktop.executables[0]}${runningLabel}${profileLabel}`
       : "Not installed. Install the official app, or keep an Edge/Chrome window open with a DevTools port.",
+    ...(desktop.installed && !desktop.endpoint ? { repair: desktop.hint } : {}),
   });
 
   checks.push({
