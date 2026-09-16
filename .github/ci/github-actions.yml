@@ -1,3 +1,19 @@
+# GitHub Actions workflow for Agent2LLM.
+#
+# This file intentionally lives OUTSIDE `.github/workflows/`.
+#
+# GitHub treats `.github/workflows/**` as a protected path: any push that creates
+# or updates a file there is rejected unless the credential carries the
+# `workflow` scope (a plain `repo`-scoped PAT is refused with
+# "refusing to allow a Personal Access Token to create or update workflow").
+# Keeping it here means the repository can be pushed with `repo` alone.
+#
+# To enable CI, move it into the workflow directory:
+#
+#   mkdir -p .github/workflows
+#   mv .github/ci/github-actions.yml .github/workflows/ci.yml
+#
+# Nothing else needs to change. Matrix: Linux / Windows / macOS x Node 20 / 22.
 name: CI
 
 on:
