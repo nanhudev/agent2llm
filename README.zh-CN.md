@@ -5,6 +5,8 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 [![协议](https://img.shields.io/badge/protocol-a2l%2F1-blue.svg)](./docs/protocol/a2l-protocol.md)
 
+简体中文 · [English](./README.md)
+
 **最强模型负责思考，你顺手的 Agent 负责干活。**
 
 用 ChatGPT 或 Claude 当推理大脑，驱动 DeepSeek Harness、WorkBuddy、Codex、
