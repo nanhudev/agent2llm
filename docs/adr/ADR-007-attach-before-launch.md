@@ -44,6 +44,16 @@ Rules that come with it:
   works, so there is no per-application adapter to maintain.
 - Whether a particular desktop build accepts a debug flag cannot be known from
   outside. Detection reports what it observed and nothing more.
+- Discovery reads the port an engine recorded for itself (`DevToolsActivePort`)
+  before sweeping conventional ports. A packaged desktop build renders through
+  WebView2, whose flags come from `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` or the
+  matching policy key rather than from the app's own command line, and the value
+  may legitimately be `--remote-debugging-port=0` — a port chosen by the engine.
+  Guessing cannot reach that window; a file it wrote can.
+- A profile file is not evidence by itself. It outlives its process, so the
+  endpoint it names is probed exactly like a guessed one and skipped when nothing
+  answers. Trusting the file would resurrect the failure the probe rule exists to
+  prevent.
 
 ## Consequences
 

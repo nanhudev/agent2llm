@@ -113,8 +113,42 @@ a window you can watch, it survives between CLI runs, and you never log in twice
 anything that exposes a DevTools port can be driven — the desktop build, or your
 own Edge/Chrome. There is no per-application adapter to maintain.
 
-Start a window with a debug port. With Edge, which is what this was tested
-against:
+### The desktop build is the better host
+
+You are already signed in, the window outlives the CLI process, and nothing about
+it looks like automation. One catch: a packaged desktop build does not publish a
+port on its own, and it renders through **WebView2** rather than being its own
+Chromium, so the switch belongs to WebView2 rather than to the app.
+
+Set the flag for a single launch:
+
+```powershell
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
+# then start the app the way you normally do
+```
+
+Or make it stick for that executable:
+
+```bat
+reg add "HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments" ^
+  /v ChatGPT.exe /t REG_SZ /d "--remote-debugging-port=9222" /f
+```
+
+Quit the app completely and start it again. `agent2llm doctor` should then report
+`✓ Window attach`.
+
+You do not have to pick the port. Chromium writes whichever port it bound into
+`DevToolsActivePort` in the app's profile, and the transport reads that file before
+it sweeps anything, so `--remote-debugging-port=0` works too — as does a port that
+changes between runs. Both the unpackaged layout (`%LOCALAPPDATA%\ChatGPT\EBWebView`)
+and the redirection a Microsoft Store package uses
+(`…\Packages\<package>\LocalCache\…\EBWebView`) are searched. A profile file whose
+process has exited is not treated as a window: nothing answers on it, so it is
+skipped like any other dead endpoint.
+
+### Attaching to Edge or Chrome
+
+Start a window with a debug port. Edge is what this was tested against:
 
 ```bash
 msedge --remote-debugging-port=9222 --user-data-dir=%LOCALAPPDATA%\a2l-window
@@ -129,29 +163,19 @@ agent2llm run --brain chatgpt-web --harness workbuddy \
   --endpoint http://127.0.0.1:9222
 ```
 
-`--endpoint` is a shortcut for `AGENT2LLM_ATTACH_ENDPOINT`. Without either, the
-three default ports are swept.
+`--endpoint` is a shortcut for `AGENT2LLM_ATTACH_ENDPOINT`. With neither, ports
+named by a profile file are tried first, then 9222, 9223 and 9229.
 
 A port is only treated as attachable when `/json/version` answers on it and names
 the engine. An open socket is not evidence, and guessing turns "no window" into a
 confusing protocol error later. Detaching ends our session; it does not close the
 window, which `tests/cdp-attach.test.mjs` asserts.
 
-### About the desktop build
-
-An Electron or WebView2 shell should accept `--remote-debugging-port` the way any
-Chromium shell does, which would put it on the same path as Edge above. Whether a
-particular build allows the flag is per-build, and no amount of reading
-documentation settles it — only starting it and looking.
-
-```bash
-# start it with a debug port, then:
-agent2llm detect
-```
-
-If it answers, `detect` and `doctor` will say so. If it does not, they say that
-instead. That is as far as this project can honestly go from a machine with no
-desktop build installed — see [Known gaps](#known-gaps).
+What has actually been exercised: attaching, a round trip, and surviving a detach,
+against an Edge 153 window started with an explicit port, and against a Chromium
+that bound a random port and announced it only through its profile file. What has
+not: a real ChatGPT or Claude desktop build, because none is installed on the
+machine this was written on.
 
 ## Commands
 
@@ -207,7 +231,9 @@ Listed because they are real, not because they are interesting.
 - Nothing has been verified against a live ChatGPT or Claude account from this
   machine. The browser transport is verified up to a page loading; login, MCP
   pairing and a full turn are not.
-- The desktop build has not been tried here, because none is installed.
+- The desktop build has not been tried here, because none is installed. The
+  WebView2 flag above is Microsoft's documented way to open a debug port in a
+  WebView2 host; it has not been confirmed against a specific release of the app.
 - Web Brains scrape a UI, so selectors break when the site changes. The selectors
   are in one file per Brain, on purpose.
 - `chatgpt.com` must be reachable. Cloudflare answers a headless Chromium with
@@ -275,7 +301,9 @@ npm run verify
 ```
 
 Tests are plain Node scripts — there is no test framework to install. Each file
-runs in its own process against an isolated `AGENT2LLM_STATE_DIR`.
+runs in its own process against an isolated `AGENT2LLM_STATE_DIR`. The transport
+suite starts a real Chromium where one is available and reports itself as skipped
+where it is not, so the same command means the same thing on every machine.
 
 ### Browser engine (optional)
 

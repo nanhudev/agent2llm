@@ -35,8 +35,48 @@ connection, another exceeds its timeout, and two adapters disagree about the sam
 window.
 
 `--endpoint` (or `AGENT2LLM_ATTACH_ENDPOINT`) supplies an explicit endpoint and
-skips the port sweep. `requireAttach` turns a missing endpoint into an error
+skips discovery entirely. `requireAttach` turns a missing endpoint into an error
 instead of a silent fall-through to a launch.
+
+## Finding a window that never announced its port
+
+Guessing conventional ports works for a browser started with
+`--remote-debugging-port=9222`, and fails for everything that binds a port of
+its choosing. Chromium writes the port it bound into `DevToolsActivePort` in its
+user-data directory, which is the mechanism this project reads:
+
+```
+<user-data-dir>/DevToolsActivePort
+  line 1: the port
+  line 2: the browser WebSocket path
+```
+
+Only line one is used. The HTTP endpoint derived from it behaves exactly like one
+written by hand, and `connectOverCDP` accepts either form.
+
+This matters most for a **WebView2 host**, which is what packaged desktop builds
+are. There is no `--remote-debugging-port` argument to pass to the app itself:
+the engine reads its flags from `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` or from
+`HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments`, and
+the value may legitimately be `--remote-debugging-port=0`, in which case the port
+is only knowable from the profile file.
+
+`devToolsActivePortPaths()` lists candidate files rather than assuming a layout.
+Windows moves these around: an unpackaged app writes to
+`%LOCALAPPDATA%\<App>\EBWebView\`, while a Microsoft Store package is redirected
+under `%LOCALAPPDATA%\Packages\<package>\` at one of several depths depending on
+the directory the host requested. One directory listing plus a name filter
+survives that; a fixed path list does not. `root` is injectable so the behaviour
+is testable against a fixture directory instead of the real profile store.
+
+A profile file outlives the process that wrote it. That is not treated as a
+window: the endpoint is probed like any other, nothing answers, and the sweep
+continues. The alternative — trusting the file — would report a dead port as
+attachable, which is precisely the failure the `/json/version` rule exists to
+prevent.
+
+Discovery runs before the port sweep: a port an engine recorded itself is
+evidence, a port we guessed is a hunch.
 
 ## Implementations
 
@@ -53,8 +93,11 @@ launching or by attaching. That is also why both behave identically under test.
 
 Desktop application sensing lives in `packages/transports/src/desktop.ts`. It
 reports what it observed — an executable on disk, whether a process is running,
-and whether a port answered — and never claims that a given build exposes a
-DevTools port. Only starting it settles that.
+whether a profile file names a port, and whether anything answered on it — and
+never claims that a given build exposes a DevTools port. Distinguishing "installed
+but not running" from "installed and unable to be attached to" is the difference
+between a hint that works and one that wastes an afternoon; only starting the app
+settles the rest.
 
 ## Ownership of the window
 
@@ -107,6 +150,11 @@ Browser logic is split so it can be tested without a live site:
 CDP, driving a fixture page so no network is involved. It uses `--headless=new` on
 purpose: the test covers the protocol and the contract, not how a visible window
 renders. It is skipped, not failed, on a machine with no Chromium to attach to.
+
+`tests/devtools-active-port.test.mjs` covers profile discovery with no browser at
+all, against a temporary directory shaped like both the unpackaged and the Store
+layout. The case worth keeping is the stale file: it must degrade to "nothing
+there", never to a port that a later attempt would blame on the browser.
 
 ## Screenshots and privacy
 

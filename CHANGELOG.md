@@ -16,10 +16,20 @@ All notable changes are documented here. Format follows
 - Desktop application sensing (`packages/transports/src/desktop.ts`): reports an
   executable on disk, whether a process is running, and a DevTools endpoint only
   when one actually answered.
+- **Profile-based port discovery.** A window that never announced its port is
+  found by reading `DevToolsActivePort` from the app's profile before sweeping
+  conventional ports. This is what reaches a packaged desktop build, whose engine
+  is WebView2 and may be started with `--remote-debugging-port=0`; both the
+  unpackaged and the Microsoft Store redirected profile layouts are searched. A
+  stale file left behind by an exited process is probed and skipped, not trusted.
 - `agent2llm doctor` reports `Window attach` and `ChatGPT desktop` separately
-  from browser automation, in that order.
+  from browser automation, in that order. The desktop check names the profile it
+  found and, when the app publishes no port, the switch that makes it.
 - `tests/cdp-attach.test.mjs` drives a real Chromium over CDP and asserts that
   detaching does not close the window it attached to.
+- `tests/devtools-active-port.test.mjs` covers profile discovery against both
+  layouts, malformed and empty files, unrelated profile directories, and a stale
+  file whose process has exited.
 
 ### Fixed
 
