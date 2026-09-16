@@ -55,12 +55,15 @@ export class ManualBrowserTransport implements BrowserTransport {
 
   async state(): Promise<BrowserPageState> {
     const inbox = this.inboxPath();
+    const last = fs.existsSync(inbox) ? fs.readFileSync(inbox, "utf8") : "";
     return {
       url: this.url,
       loggedIn: true,
       challenge: false,
       streaming: false,
-      lastAssistantMessage: fs.existsSync(inbox) ? fs.readFileSync(inbox, "utf8") : "",
+      lastAssistantMessage: last,
+      // The inbox is a single slot, so there is either a reply waiting or not.
+      messageCount: last.trim() === "" ? 0 : 1,
     };
   }
 
