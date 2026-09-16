@@ -125,7 +125,7 @@ export class ClaudeWebBrain extends BaseBrainAdapter {
         "Some connector features depend on the Claude plan; capabilities are probed, never assumed.",
         "DOM selectors are version-sensitive.",
       ],
-      auth: { required: true, authenticated: false, method: "official web login + MCP connector" },
+      auth: { required: true, authenticated: false, checked: false, method: "official web login + MCP connector" },
       facts: {
         playwrightInstalled: browser.installed,
         transport,

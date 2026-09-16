@@ -74,7 +74,7 @@ export class ClaudeCodeHarnessAdapter extends CliHarnessAdapter {
         "Not installed in this environment: contract-validated, real execution unverified.",
         "Interactive terminal scraping is deliberately not used; only -p/--print mode.",
       ],
-      auth: { required: true, authenticated: false, method: "Claude Code login / ANTHROPIC_API_KEY" },
+      auth: { required: true, authenticated: false, checked: false, method: "Claude Code login / ANTHROPIC_API_KEY" },
       facts: {
         version: this.location?.version ?? "unknown",
         printFlag: this.hasFlag("-p"),

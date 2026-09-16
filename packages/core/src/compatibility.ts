@@ -89,21 +89,33 @@ export function checkCompatibility(input: CompatibilityInput): CompatibilityRepo
     });
   }
 
+  // A required auth that was never checked is not a failure, it is a question
+  // we cannot answer yet. Blocking on it would stop every Web Brain before the
+  // window it needs to sign in even opens. Only a *measured* "not signed in"
+  // refuses; an unknown one warns and lets the run find out for real.
   if (input.brain.auth.required && !input.brain.auth.authenticated) {
+    const unknown = input.brain.auth.checked !== true;
     issues.push({
-      severity: input.ignoreAuth ? "warn" : "fail",
+      severity: input.ignoreAuth || unknown ? "warn" : "fail",
       target: "brain",
       code: "BRAIN_NOT_AUTHENTICATED",
-      message: `Brain adapter '${input.brainId}' requires authentication (${input.brain.auth.method ?? "unknown"}).`,
+      message: unknown
+        ? `Brain adapter '${input.brainId}' needs ${input.brain.auth.method ?? "a sign-in"}; ` +
+          "Agent2LLM cannot read another product's credentials, so this is unverified until the run starts."
+        : `Brain adapter '${input.brainId}' requires authentication (${input.brain.auth.method ?? "unknown"}).`,
     });
   }
 
   if (input.harness.auth.required && !input.harness.auth.authenticated) {
+    const unknown = input.harness.auth.checked !== true;
     issues.push({
       severity: "warn",
       target: "harness",
       code: "HARNESS_NOT_AUTHENTICATED",
-      message: `Harness adapter '${input.harnessId}' requires authentication (${input.harness.auth.method ?? "unknown"}).`,
+      message: unknown
+        ? `Harness adapter '${input.harnessId}' needs ${input.harness.auth.method ?? "a sign-in"}, ` +
+          "which Agent2LLM does not manage; the first execution will surface it if it is missing."
+        : `Harness adapter '${input.harnessId}' requires authentication (${input.harness.auth.method ?? "unknown"}).`,
     });
   }
 

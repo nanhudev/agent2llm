@@ -122,7 +122,10 @@ export class ApiBrain extends BaseBrainAdapter {
           ],
       auth: {
         required: true,
+        // Measured, not assumed: the key is either in the environment or it is
+        // not, so this one really can answer.
         authenticated: Boolean(process.env[this.provider.credentialEnv]),
+        checked: true,
         method: `${this.provider.credentialEnv} environment variable`,
       },
       facts: {

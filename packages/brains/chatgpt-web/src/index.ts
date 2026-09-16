@@ -101,6 +101,9 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
       selectTransport(),
       probeDesktopApp(),
     ]);
+    // A saved conversation is the only durable trace of a completed sign-in
+    // that survives between processes, so it is what "authenticated" answers.
+    const saved = loadWebRef("chatgpt-web");
     const transport: CapabilityManifest["transport"] =
       selection.mode === "cdp" ? "cdp" : selection.mode === "playwright" ? "browser" : "manual";
     const base = withCapabilities(emptyManifest(transport), [
@@ -139,11 +142,22 @@ export class ChatGPTWebBrain extends BaseBrainAdapter {
         "Login, CAPTCHA and 2FA must be completed by the human in the official interface.",
         "The desktop build is attachable but not drivable: it serves its own interface from an app:// scheme instead of loading chatgpt.com, so these selectors do not describe it. Use the web app in a browser window.",
       ],
-      auth: { required: true, authenticated: false, method: "official web login + OAuth 2.1 MCP pairing" },
+      // Whether a human is signed in is not knowable from here: the browser
+      // profile holds that, and Agent2LLM does not read another product's
+      // credentials. A saved conversation proves a past run, not a current
+      // session, so it is reported as a fact rather than as proof of auth.
+      // Left unchecked, the check warns and the run opens the window that lets
+      // the human sign in — which is the only way the question gets answered.
+      auth: {
+        required: true,
+        authenticated: false,
+        method: "official web login + OAuth 2.1 MCP pairing",
+      },
       facts: {
         playwrightInstalled: browser.installed,
         transport,
         transportReason: selection.reason,
+        savedConversation: saved?.url ?? "none",
         desktopAppInstalled: desktop.installed,
         desktopAppRunning: desktop.running === null ? "unknown" : desktop.running,
         ...(desktop.executables.length > 0 ? { desktopAppExecutable: desktop.executables[0] } : {}),

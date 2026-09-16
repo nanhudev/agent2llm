@@ -210,6 +210,39 @@ export function discoverAttachEndpoints(options: ProfileSearchOptions = {}): str
     const found = readDevToolsActivePort(file);
     if (found && !out.includes(found.endpoint)) out.push(found.endpoint);
   }
+  for (const endpoint of extraPortEndpoints()) {
+    if (!out.includes(endpoint)) out.push(endpoint);
+  }
+  return out;
+}
+
+/**
+ * Names the ports candidate list, operator-supplied.
+ *
+ * `DEFAULT_DEVTOOLS_PORTS` is a fixed guess, and a fixed guess cannot cover
+ * `--remote-debugging-port=0`, where the engine picks a free port and writes it
+ * only into its own profile directory. When that directory is not one of the
+ * shapes below — a hand-launched browser with `--user-data-dir` somewhere else,
+ * for instance — the port is discoverable by nothing except the person who
+ * started it. This variable is how they say so:
+ *
+ *   AGENT2LLM_ATTACH_PORTS=9333,9444
+ *
+ * A profile-declared port still outranks a listed one, and a listed port that
+ * answers nothing costs a single refused connection.
+ */
+export const ATTACH_PORTS_ENV = "AGENT2LLM_ATTACH_PORTS";
+
+function extraPortEndpoints(): string[] {
+  const raw = process.env[ATTACH_PORTS_ENV]?.trim();
+  if (!raw) return [];
+  const out: string[] = [];
+  for (const field of raw.split(",")) {
+    const port = Number.parseInt(field.trim(), 10);
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) continue;
+    const endpoint = `http://127.0.0.1:${port}`;
+    if (!out.includes(endpoint)) out.push(endpoint);
+  }
   return out;
 }
 

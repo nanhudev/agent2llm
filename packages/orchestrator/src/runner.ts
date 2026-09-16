@@ -65,6 +65,12 @@ export interface RunOptions {
   maxIterations?: number;
   /** Resolve adapter setup without contacting any external product. */
   dryRun?: boolean;
+  /**
+   * Proceed even when an adapter *measured* that it is not authenticated.
+   * Distinct from the unknown case, which already warns its way through: this
+   * is for a user who knows better than the measurement.
+   */
+  ignoreAuth?: boolean;
 }
 
 export interface RunResult {
@@ -121,7 +127,7 @@ export class Orchestrator {
       logger: this.logger,
       workflowId,
       requirement,
-      ...(options.dryRun ? { ignoreAuth: true } : {}),
+      ...(options.dryRun || options.ignoreAuth ? { ignoreAuth: true } : {}),
     });
 
     const session = loadOrCreateSession(this.deps.sessions, this.deps.workspaceId, options, workflowId);

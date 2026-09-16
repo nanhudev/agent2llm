@@ -73,7 +73,7 @@ export class OpenCodeHarnessAdapter extends CliHarnessAdapter {
         "Not installed in this environment: contract-validated, real execution unverified.",
         "`--format json` emits raw JSON events; plain-text runs are logged line by line.",
       ],
-      auth: { required: true, authenticated: false, method: "provider API key via `opencode auth login`" },
+      auth: { required: true, authenticated: false, checked: false, method: "provider API key via `opencode auth login`" },
       facts: {
         version: this.location?.version ?? "unknown",
         runSubcommand: this.hasFlag("run"),

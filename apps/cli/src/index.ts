@@ -200,6 +200,7 @@ async function main(): Promise<number> {
           json,
           verbose,
           dryRun: bool(flags["dry-run"]),
+          ignoreAuth: bool(flags["ignore-auth"]),
         });
 
       case "setup":

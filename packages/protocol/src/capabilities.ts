@@ -61,6 +61,22 @@ export type AdapterStatus = (typeof ADAPTER_STATUSES)[number];
 export const authStateSchema = z.object({
   required: z.boolean(),
   authenticated: z.boolean(),
+  /**
+   * Whether `authenticated` is an answer or an absence of one.
+   *
+   * Most adapters cannot see another product's credentials: a Web Brain would
+   * need a browser round trip to know whether a human is signed in, and a CLI
+   * harness keeps its session in its own credential store. Reporting
+   * `authenticated: false` for those is not a measurement, it is a default —
+   * and treating that default as "not signed in" made every Web Brain run fail
+   * before it opened a window.
+   *
+   * `checked` absent means "unknown": the compatibility check warns instead of
+   * refusing, and the truth arrives when the run actually tries. An adapter
+   * that never measures therefore writes nothing at all, rather than writing a
+   * measurement it did not take.
+   */
+  checked: z.boolean().optional(),
   method: z.string().max(80).optional(),
 });
 export type AuthState = z.infer<typeof authStateSchema>;

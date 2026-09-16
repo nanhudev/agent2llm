@@ -27,6 +27,12 @@ export interface RunOptions {
   json?: boolean;
   verbose?: boolean;
   dryRun?: boolean;
+  /**
+   * Run even though an adapter reports it is not authenticated. Web Brains and
+   * CLI harnesses keep their own credentials, which Agent2LLM does not read;
+   * this is how a user says "I am signed in, try anyway".
+   */
+  ignoreAuth?: boolean;
   maxIterations?: number;
   /**
    * DevTools endpoint of a window to drive, e.g. `http://127.0.0.1:9222`.
@@ -87,6 +93,7 @@ export async function runRun(registry: AdapterRegistry, options: RunOptions): Pr
       ...(options.session ? { sessionId: options.session } : {}),
       ...(options.maxIterations ? { maxIterations: options.maxIterations } : {}),
       ...(options.dryRun ? { dryRun: true } : {}),
+      ...(options.ignoreAuth ? { ignoreAuth: true } : {}),
     });
     spin.succeed(result.summary);
     if (options.json) ui.jsonOutput({ ...result, events });

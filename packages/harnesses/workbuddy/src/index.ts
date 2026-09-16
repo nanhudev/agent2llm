@@ -111,7 +111,11 @@ export class WorkBuddyHarnessAdapter extends CliHarnessAdapter {
         ...(this.hasFlag("--resume") ? [] : ["This build did not advertise --resume; sessions will not continue across rounds."]),
         "Agent2LLM never bypasses permissions by default: --dangerously-skip-permissions is not used.",
       ],
-      auth: { required: true, authenticated: false, method: "WorkBuddy CLI login" },
+      // Finding the binary is evidence the product is installed; it is not
+      // evidence the user is signed in, and Agent2LLM deliberately does not
+      // read another product's credential store to find out. Saying "unknown"
+      // is the honest answer, and the first execution reports the truth.
+      auth: { required: true, authenticated: false, checked: false, method: "WorkBuddy CLI login" },
       facts: {
         version: this.location?.version ?? "unknown",
         binary: this.location?.path ?? "not found",

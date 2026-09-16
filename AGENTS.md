@@ -91,6 +91,23 @@ agent2llm setup --brain <brain> --harness <harness>
     the ones that work.
   - Codex out of quota: `You've hit your usage limit ... try again at <date>`.
     Report the date to the human; there is nothing to fix locally.
+- **A Web Brain window is open but `doctor` says "no DevTools endpoint
+  answered".** Discovery is a guess, and three things defeat it:
+  - the window listens on a port that is not 9222/9223/9229 (common with
+    `--remote-debugging-port=0`, where the engine picks the port itself);
+  - the app's `DevToolsActivePort` is stale — Chromium does not always rewrite
+    or remove it, so it can name a port from a previous run that has exited;
+  - the window is an application shell (`app://`), whose `chatgpt.com`
+    webviews are not exposed as drivable pages.
+  Confirm with `curl -s http://127.0.0.1:<port>/json/version`, then name it
+  explicitly: `--endpoint http://127.0.0.1:<port>`, or `AGENT2LLM_ATTACH_PORTS`
+  for a port that should always be swept. `doctor` now reports which of these
+  it hit instead of one generic hint.
+- **A run refuses with "requires authentication".** Agent2LLM does not read
+  another product's credentials, so for most adapters the auth state is
+  *unknown*, not false — and unknown warns rather than blocks. A refusal means
+  an adapter actually measured it. `--ignore-auth` overrides that when the
+  human knows the session exists.
 - **A desktop app is installed but the harness is not detected.** Most
   app-managed CLIs keep their binary next to the app, not on PATH. Codex
   Desktop uses `$CODEX_HOME/.sandbox-bin`. Check there before concluding the

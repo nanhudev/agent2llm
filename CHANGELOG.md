@@ -68,8 +68,30 @@ All notable changes are documented here. Format follows
 - `tests/desktop-app.test.mjs` covers the application-shell classification: an
   `app://` window is not a web page, its host is not the target host, and a
   running app that publishes no port does not select `cdp`.
+- `AGENT2LLM_ATTACH_PORTS=comma,separated,ports` adds endpoints to discovery,
+  for a window whose port nobody can guess — the `--remote-debugging-port=0`
+  case where the engine picks the port and no readable profile records it.
+- `tests/auth-honesty.test.mjs` covers the authentication rules below.
 
 ### Fixed
+
+- **`--endpoint` was ignored by every read-only command.** `selectTransport()`
+  honoured `AGENT2LLM_ATTACH_ENDPOINT`, but `doctor` and the desktop-app probe
+  called `findAttachEndpoint()` with no arguments, so they swept only the
+  conventional ports and reported "no DevTools endpoint answered" about a
+  window the user had just pointed them at. The explicit endpoint now outranks
+  every heuristic in one place, and `doctor` says which source it searched.
+- **A required sign-in blocked every Web Brain run.** `auth.authenticated` was
+  a plain boolean, and every adapter that cannot see another product's
+  credentials wrote `false`. The compatibility check read that as "not signed
+  in" and refused — so no Web Brain ever reached the window a human needs in
+  order to sign in. `auth.checked` now distinguishes a measurement from an
+  absence of one: unknown warns and the run proceeds, a measured failure still
+  refuses. `--ignore-auth` overrides a measurement when the human knows better.
+- **The "no endpoint" hint was the same for every cause.** It told the user to
+  start a window even when a stale profile file was the actual problem. The
+  repair line now names what was searched: the dead endpoint, the stale profile
+  port, or the ports swept.
 
 - **`waitForReply()` could block until its timeout.** It took its baseline when
   the wait began, so a reply already on screen — exactly what a fast or local

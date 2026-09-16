@@ -13,6 +13,8 @@ import { findBridgeObservation } from "@agent2llm/bridge";
 import { WorkspaceRegistry } from "@agent2llm/workspace";
 import { SessionStore } from "@agent2llm/session";
 import {
+  attachEndpointSource,
+  attachRepairHint,
   findAttachEndpoint,
   probeBrowserModule,
   probeDesktopApp,
@@ -74,6 +76,7 @@ export async function runDoctor(
   // A doctor run is an explicit "tell me the state right now". A cached answer
   // from a second ago is precisely what the user is asking us not to trust.
   resetAttachProbeCache();
+  const attachSource = attachEndpointSource();
   const attach = await findAttachEndpoint();
   const desktop = await probeDesktopApp();
 
@@ -85,12 +88,7 @@ export async function runDoctor(
     message: attach
       ? `Attaching is available at ${attach.endpoint} (${attach.browser ?? "unknown engine"}).`
       : "No DevTools endpoint answered. Web Brains will launch their own browser instead.",
-    ...(attach
-      ? {}
-      : {
-          repair:
-            "Start a Chromium window with a debug port — msedge --remote-debugging-port=9222, or chrome --remote-debugging-port=9222. For the packaged app, see the 'ChatGPT desktop' check.",
-        }),
+    ...(attach ? {} : { repair: attachRepairHint(attachSource) }),
   });
 
   const runningLabel =

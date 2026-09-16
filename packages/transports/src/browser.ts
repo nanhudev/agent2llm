@@ -12,7 +12,7 @@
  *     USER_ACTION_REQUIRED and never automated around
  */
 import { createRequire } from "node:module";
-import { discoverAttachEndpoints } from "./profile.js";
+import { ATTACH_PORTS_ENV, discoverAttachEndpoints } from "./profile.js";
 import type { ProfileSearchOptions } from "./profile.js";
 
 export interface BrowserSelectors {
@@ -203,6 +203,16 @@ export interface FindAttachEndpointOptions extends ProfileSearchOptions {
   timeoutMs?: number;
   /** Skip profile discovery and try exactly these endpoints. */
   extraEndpoints?: string[];
+  /**
+   * Honour `AGENT2LLM_ATTACH_ENDPOINT` / `--endpoint` before anything else.
+   *
+   * `selectTransport` always took the explicit endpoint seriously, but the
+   * read-only callers (`doctor`, the desktop-app probe) called this with no
+   * arguments and swept only the conventional ports. So a user who pointed the
+   * CLI at a window by hand was still told "no DevTools endpoint answered" —
+   * the one piece of evidence they had supplied was the one piece ignored.
+   */
+  explicitEndpoint?: string;
 }
 
 /**
@@ -219,6 +229,13 @@ export async function findAttachEndpoint(
   options: FindAttachEndpointOptions = {}
 ): Promise<AttachEndpoint | null> {
   const timeoutMs = options.timeoutMs ?? 800;
+
+  // An endpoint the user named outranks every heuristic: it is a statement of
+  // fact ("the window is here"), not a guess about where one might be.
+  const explicit = options.explicitEndpoint?.trim() ?? process.env[ATTACH_ENDPOINT_ENV]?.trim() ?? "";
+  if (explicit !== "") {
+    return probeAttachEndpoint(explicit, { timeoutMs });
+  }
 
   const discovered =
     options.extraEndpoints ??
@@ -237,5 +254,56 @@ export async function findAttachEndpoint(
     if (hit) return hit;
   }
   return null;
+}
+
+/**
+ * Where the attach answer came from, or would have come from.
+ *
+ * `findAttachEndpoint` collapses three quite different situations into one
+ * `null`: nobody told us where to look, we looked in the places we know and
+ * nothing answered, or the user named an endpoint and it was dead. Those need
+ * three different repairs, so the reason is reported instead of inferred.
+ */
+export type AttachSource =
+  | { kind: "explicit"; endpoint: string }
+  | { kind: "profile"; endpoints: string[] }
+  | { kind: "ports"; ports: number[] };
+
+export function attachEndpointSource(options: FindAttachEndpointOptions = {}): AttachSource {
+  const explicit = options.explicitEndpoint?.trim() ?? process.env[ATTACH_ENDPOINT_ENV]?.trim() ?? "";
+  if (explicit !== "") return { kind: "explicit", endpoint: explicit };
+
+  const extra = options.extraEndpoints;
+  if (extra && extra.length > 0) return { kind: "profile", endpoints: extra };
+
+  const fromProfiles = discoverAttachEndpoints({
+    ...(options.root !== undefined ? { root: options.root } : {}),
+    ...(options.match !== undefined ? { match: options.match } : {}),
+  });
+  if (fromProfiles.length > 0) return { kind: "profile", endpoints: fromProfiles };
+
+  return { kind: "ports", ports: options.ports ?? DEFAULT_DEVTOOLS_PORTS };
+}
+
+/** The repair line for a failed attach, chosen by where we looked. */
+export function attachRepairHint(source: AttachSource): string {
+  switch (source.kind) {
+    case "explicit":
+      return (
+        `Nothing answered at ${source.endpoint}. Check the window is still open and that its port ` +
+        "matches, then re-run. Drop the endpoint to let Agent2LLM find a window itself."
+      );
+    case "profile":
+      return (
+        `A window profile names ${source.endpoints.join(", ")}, but nothing answered there. ` +
+        "The process that wrote it has exited — start that app again."
+      );
+    case "ports":
+      return (
+        `Nothing answered on ${source.ports.join(", ")}. Start a Chromium window with a debug port ` +
+        "— msedge --remote-debugging-port=9222 — or name the port you used with " +
+        `--endpoint http://127.0.0.1:<port> (or ${ATTACH_PORTS_ENV}=<port>).`
+      );
+  }
 }
 

@@ -113,7 +113,7 @@ export class CursorHarnessAdapter extends CliHarnessAdapter {
         "Headless runs need a CURSOR_API_KEY or an existing `agent login` session.",
         "The Cursor IDE Agent itself is modelled by CursorIdeTransport; Agent2LLM drives the CLI transport for automation.",
       ],
-      auth: { required: true, authenticated: false, method: "CURSOR_API_KEY or `agent login`" },
+      auth: { required: true, authenticated: false, checked: false, method: "CURSOR_API_KEY or `agent login`" },
       facts: {
         version: this.location?.version ?? "unknown",
         printFlag: this.hasFlag("--print"),

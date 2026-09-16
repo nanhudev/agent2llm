@@ -96,7 +96,7 @@ export class CodexHarnessAdapter extends CliHarnessAdapter {
         ...(this.hasFlag("resume") ? [] : ["Session resume was not advertised by this build."]),
         "Authentication is owned by Codex (CODEX_HOME); Agent2LLM never reads or stores it.",
       ],
-      auth: { required: true, authenticated: false, method: "Codex CLI sign-in (CODEX_HOME)" },
+      auth: { required: true, authenticated: false, checked: false, method: "Codex CLI sign-in (CODEX_HOME)" },
       facts: {
         version: this.location?.version ?? "unknown",
         execSubcommand: this.hasFlag("exec"),
