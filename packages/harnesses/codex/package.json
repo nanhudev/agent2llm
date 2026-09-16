@@ -18,6 +18,7 @@
   ],
   "dependencies": {
     "@agent2llm/adapter-sdk": "*",
+    "@agent2llm/detect": "*",
     "@agent2llm/harness-cli-runtime": "*",
     "@agent2llm/protocol": "*"
   }

@@ -20,6 +20,7 @@ import {
   stripAnsi,
   type CliHarnessProfile,
 } from "@agent2llm/harness-cli-runtime";
+import { homeDirectories } from "@agent2llm/detect";
 import type {
   DetectionResult,
   DetectContext,
@@ -28,6 +29,17 @@ import type {
   HarnessSession,
 } from "@agent2llm/adapter-sdk";
 
+/**
+ * Discovery.
+ *
+ * A standalone `codex` on PATH is the normal case for CLI users. Codex
+ * Desktop is the case that used to fail detection: it stages a complete CLI
+ * under `$CODEX_HOME/.sandbox-bin` and intentionally keeps it off PATH, and it
+ * also rotates versioned `codex-command-runner-*.exe` files there. Both roots
+ * are probed, newest first.
+ */
+const CODEX_HOME_DIRS = homeDirectories([".codex/.sandbox-bin", ".codex/bin"]);
+
 const PROFILE: CliHarnessProfile = {
   id: "codex",
   name: "Codex",
@@ -35,6 +47,11 @@ const PROFILE: CliHarnessProfile = {
   vendor: "OpenAI",
   homepage: "https://developers.openai.com/codex",
   drives: "codex",
+  candidates: CODEX_HOME_DIRS.map((dir) => `${dir}/codex.exe`),
+  versionedDirs: CODEX_HOME_DIRS,
+  versionedPattern: /^codex-command-runner-[\d.]+(?:-[a-z]+\.[\d.]+)*\.exe$/i,
+  // `codex --help` only lists subcommands; the flags live under `exec`.
+  helpSubcommand: "exec",
 };
 
 export class CodexHarnessAdapter extends CliHarnessAdapter {

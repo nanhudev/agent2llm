@@ -115,6 +115,12 @@ export function readVersion(binPath: string, timeoutMs = 8000): Promise<string |
 
 export interface LocateOptions {
   candidates?: readonly string[];
+  /**
+   * Directories scanned for the newest binary matching `versionedPattern`.
+   * Used by products that ship versioned, product-owned binaries.
+   */
+  versionedDirs?: readonly string[];
+  versionedPattern?: RegExp;
   probeVersion?: boolean;
 }
 
@@ -141,6 +147,21 @@ export async function locateBinary(name: string, options: LocateOptions = {}): P
     }
   }
 
+  const pattern = options.versionedPattern;
+  if (pattern) {
+    for (const dir of options.versionedDirs ?? []) {
+      const newest = newestInDirectory(dir.replace(/^~/, os.homedir()), pattern);
+      if (newest) {
+        return {
+          name,
+          path: newest,
+          source: "candidate",
+          version: options.probeVersion === false ? null : await readVersion(newest),
+        };
+      }
+    }
+  }
+
   for (const dir of commonDirectories()) {
     for (const candidate of executableCandidates(dir, name)) {
       if (isExecutable(candidate)) {
@@ -155,6 +176,53 @@ export async function locateBinary(name: string, options: LocateOptions = {}): P
   }
 
   return null;
+}
+
+/**
+ * Directories a product uses for its own private binaries.
+ *
+ * GUI-first agents increasingly ship a managed CLI instead of asking users to
+ * `npm install -g` one. Codex Desktop is the canonical case: it stages a full
+ * `codex.exe` under `$CODEX_HOME/.sandbox-bin` and deliberately keeps it off
+ * PATH, because the binary belongs to the app rather than to the shell.
+ *
+ * Adapters pass these as `candidates` so discovery still works when the user
+ * never installed a standalone CLI.
+ */
+export function homeDirectories(relativeDirs: readonly string[]): string[] {
+  const home = os.homedir();
+  return relativeDirs.map((dir) => path.join(home, dir));
+}
+
+/**
+ * Product-owned binary roots, expanded one level deep.
+ *
+ * Some of these roots version their children (`codex-command-runner-1.2.3.exe`)
+ * so the newest entry is what we want, not a fixed filename.
+ */
+export function newestInDirectory(dir: string, pattern: RegExp): string | null {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+  const matches = entries
+    .filter((entry) => pattern.test(entry))
+    .map((entry) => {
+      const full = path.join(dir, entry);
+      let mtime = 0;
+      try {
+        mtime = fs.statSync(full).mtimeMs;
+      } catch {
+        return null;
+      }
+      return { full, mtime };
+    })
+    .filter((entry): entry is { full: string; mtime: number } => entry !== null);
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => b.mtime - a.mtime);
+  return matches[0]?.full ?? null;
 }
 
 /** Windows / macOS application bundle hints for GUI-first agents. */

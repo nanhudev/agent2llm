@@ -77,3 +77,22 @@ agent2llm setup --brain <brain> --harness <harness>
 - `agent2llm doctor` output is the bug report. Include it.
 - Everything the CLI knows how to say, it says on the terminal. There is no
   hidden log location; `agent2llm logs` shows the sanitized log.
+- **A harness is detected but every run fails.** Run the harness's own binary
+  once, by hand, from the workspace. Agent2LLM does not proxy or retry the
+  harness's network calls, so a failure that reproduces outside a2l is the
+  harness's own problem — an expired sign-in, a spent quota, a blocked
+  network. Two observed cases:
+  - Codex behind a proxy: `unexpected status 403 Forbidden` on
+    `chatgpt.com/backend-api/codex/responses`, with an IP that is not the
+    machine's. Codex inherits `HTTP_PROXY` / `HTTPS_PROXY` from the
+    environment; if the proxy's exit is blocked, sign-in still looks healthy
+    in `codex login status`. Compare `curl -s https://chatgpt.com` with and
+    without the proxy variables, then start a2l from an environment that has
+    the ones that work.
+  - Codex out of quota: `You've hit your usage limit ... try again at <date>`.
+    Report the date to the human; there is nothing to fix locally.
+- **A desktop app is installed but the harness is not detected.** Most
+  app-managed CLIs keep their binary next to the app, not on PATH. Codex
+  Desktop uses `$CODEX_HOME/.sandbox-bin`. Check there before concluding the
+  product is missing, and prefer `agent2llm detect --json` over eyeballing
+  PATH.

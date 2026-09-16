@@ -32,6 +32,17 @@ export interface CliHarnessProfile {
   homepage?: string;
   /** Extra installation locations probed beyond PATH. */
   candidates?: readonly string[];
+  /**
+   * Product-owned directories holding versioned binaries; the newest match for
+   * `versionedPattern` wins. Codex Desktop stages its CLI this way.
+   */
+  versionedDirs?: readonly string[];
+  versionedPattern?: RegExp;
+  /**
+   * Subcommand whose `--help` advertises the real flag surface, when the
+   * top-level help only points at subcommands (e.g. `codex exec --help`).
+   */
+  helpSubcommand?: string;
   experimental?: boolean;
   /** Product this adapter drives, shown by `agent2llm adapters`. */
   drives?: string;
@@ -89,14 +100,17 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
   async detect(ctx: DetectContext = {}): Promise<DetectionResult> {
     this.detectAttempted = true;
     const names = [this.profile.bin, ...(this.profile.altBins ?? [])];
+    const locateOptions = {
+      ...(this.profile.candidates ? { candidates: this.profile.candidates } : {}),
+      ...(this.profile.versionedDirs ? { versionedDirs: this.profile.versionedDirs } : {}),
+      ...(this.profile.versionedPattern ? { versionedPattern: this.profile.versionedPattern } : {}),
+      probeVersion: !ctx.quick,
+    };
     for (const name of names) {
-      const found = await locateBinary(name, {
-        candidates: this.profile.candidates,
-        probeVersion: !ctx.quick,
-      });
+      const found = await locateBinary(name, locateOptions);
       if (found) {
         this.location = found;
-        if (!ctx.quick) this.help = await readHelp(found.path).catch(() => null);
+        if (!ctx.quick) this.help = await this.readHelpFor(found.path);
         return {
           status: "detected",
           binaryPath: found.path,
@@ -110,6 +124,19 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
       reason: `${names.join(" / ")} was not found on PATH or in the probed install locations.`,
       notes: ["Install the product and re-run `agent2llm detect` to enable this harness."],
     };
+  }
+
+  /**
+   * Some products hide the flag surface one level down: `codex --help` lists
+   * subcommands, while `codex exec --help` is what advertises `--json`,
+   * `--sandbox` and friends. Probe the subcommand first when one is declared.
+   */
+  private async readHelpFor(binPath: string): Promise<string | null> {
+    if (this.profile.helpSubcommand) {
+      const sub = await readHelp(binPath, [this.profile.helpSubcommand]).catch(() => null);
+      if (sub) return sub;
+    }
+    return readHelp(binPath).catch(() => null);
   }
 
   protected isDetected(): boolean {

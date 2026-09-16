@@ -25,6 +25,15 @@ All notable changes are documented here. Format follows
 - `AGENTS.md`: a runbook for AI agents asked to "install a2l" — install,
   verify with `doctor`, prove the loop with the mock pair, then wire a real
   brain. Pointing an agent at the repository is now a supported install path.
+- **Codex Desktop is detected without a standalone CLI.** Codex Desktop stages
+  a complete `codex.exe` under `$CODEX_HOME/.sandbox-bin` and keeps it off
+  PATH, so `agent2llm detect` used to report Codex as unimplemented on a
+  machine where it was installed and signed in. Discovery now probes that root
+  (plus `~/.codex/bin`) and, because the directory rotates versioned
+  `codex-command-runner-*.exe` files, picks the newest entry rather than a
+  fixed filename. Flag probing reads `codex exec --help`, since the top-level
+  help only lists subcommands. `packages/detect` gained `homeDirectories()`
+  and `newestInDirectory()` for adapters that drive app-managed CLIs.
 
 - **Window attach transport.** Web Brains can now drive a Chromium window that is
   already open — a desktop build, or the user's own Edge/Chrome — over the
