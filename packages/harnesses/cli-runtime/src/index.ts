@@ -10,7 +10,7 @@
 import { emptyManifest, type CapabilityManifest } from "@agent2llm/protocol";
 import { harnessUnavailable } from "@agent2llm/core";
 import { locateBinary, type BinaryLocation } from "@agent2llm/detect";
-import { helpMentions, readHelp, runProcess, type RunningProcess } from "@agent2llm/transports";
+import { helpMentions, readHelp, runProcess, type RunningProcess, type RunOutcome } from "@agent2llm/transports";
 import {
   BaseHarnessAdapter,
   type AdapterMetadata,
@@ -225,6 +225,16 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
       sessionRef: null,
     };
     let lastText = "";
+    /**
+     * The harness's own failure sentence, when it produced one.
+     *
+     * A failing CLI often emits a structured error event and *then* keeps
+     * talking — retries, transport fallbacks, a wall of prose about what it
+     * tried. Taking the last line would hand the Brain a truncated fragment of
+     * a stack message instead of the reason. The first structured failure is
+     * the reason, so it is kept separately from `lastText`.
+     */
+    let firstFailure: string | null = null;
 
     for await (const event of proc.events()) {
       if (event.stream === "stderr") {
@@ -242,6 +252,7 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
       const parsed = this.parseLine(event.line);
       if (parsed) {
         if (parsed.type === "log") lastText = parsed.message;
+        if (parsed.type === "failed" && !firstFailure) firstFailure = parsed.error.message;
         yield parsed;
       } else {
         lastText = event.line;
@@ -252,9 +263,7 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
     const outcome = await proc.outcome();
     acc.ok = !outcome.timedOut && outcome.exitCode === 0;
     acc.exitStatus = outcome.timedOut ? "timeout" : String(outcome.exitCode ?? "unknown");
-    acc.summary = outcome.timedOut
-      ? `${this.profile.name} timed out.`
-      : (lastText || `${this.profile.name} finished with exit code ${outcome.exitCode}.`).slice(0, 500);
+    acc.summary = this.summarize(outcome, acc, firstFailure, lastText);
 
     this.runs.delete(handle.id);
 
@@ -294,6 +303,54 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
   protected lastSessionRef(): string | null {
     return this.sessionRefs.get("last") ?? null;
   }
+
+  /**
+   * One sentence the Brain can act on.
+   *
+   * Order matters. A structured failure beats everything: it is the harness
+   * saying what went wrong, in its own vocabulary. A timeout is next. Only
+   * then does the last line of output get a turn, and even then it is worth
+   * checking that it is prose rather than the middle of a JSON blob — a
+   * truncated serialisation reads as noise to a reviewer.
+   *
+   * On success the last line is usually the agent's own final message, which
+   * is exactly what we want to hand over.
+   */
+  protected summarize(
+    outcome: RunOutcome,
+    acc: ExecutionAccumulator,
+    firstFailure: string | null,
+    lastText: string
+  ): string {
+    if (outcome.timedOut) {
+      return `${this.profile.name} timed out after ${Math.round(outcome.durationMs / 1000)}s.`;
+    }
+    if (firstFailure) return firstFailure.slice(0, 500);
+    if (outcome.exitCode === 0) {
+      return (lastText || `${this.profile.name} finished successfully.`).slice(0, 500);
+    }
+    const readable = meaningfulLine(lastText);
+    if (readable) return readable.slice(0, 500);
+    return `${this.profile.name} failed with exit code ${acc.exitStatus} and produced no readable message.`;
+  }
+}
+
+/**
+ * A line worth showing a human, or null.
+ *
+ * Rejects the two shapes that look like content but are not: the middle of a
+ * JSON object (starts with `{` / `,` / `"`), and a mark-up fragment such as
+ * the HTML error page a gateway returns. Either would otherwise travel to the
+ * Brain as the "summary" of a failed run.
+ */
+function meaningfulLine(line: string): string | null {
+  const text = line.trim();
+  if (text === "") return null;
+  if (/^[{[,"]/.test(text)) return null;
+  if (/^<\/?[a-z!]/i.test(text)) return null;
+  // Bare status fragments ("Reconnecting... 2/5 (…") carry no decision value.
+  if (/^Reconnecting\.\.\./i.test(text)) return null;
+  return text;
 }
 
 /** Shared helper: pull a JSON object out of a possibly-prefixed line. */
