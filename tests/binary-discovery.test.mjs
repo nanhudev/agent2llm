@@ -19,6 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import { test, assert, assertEqual } from "@agent2llm/testing";
 import { newestInDirectory, homeDirectories, locateBinary } from "@agent2llm/detect";
+import { readHelp, helpMentions } from "@agent2llm/transports";
 import { report } from "./_report.mjs";
 
 function scratch(name) {
@@ -95,6 +96,57 @@ test("binary-discovery", "versioned directories are only consulted when a patter
   });
   assert(withPattern !== null, "the pattern is what activates the scan");
   assertEqual(withPattern.source, "candidate", "a versioned hit is still a candidate source");
+});
+
+/**
+ * The subcommand must precede the help flag.
+ *
+ * `codex --help exec` asks the top-level parser for its own help and prints
+ * "Commands: exec ..."; `codex exec --help` prints the flag surface, which is
+ * where `--json` / `--sandbox` / `--cd` actually live. Getting the order wrong
+ * returns plausible-looking output, so the build gets recorded as not
+ * advertising flags it does support — resume silently stays off, and the
+ * adapter stops passing `--json`.
+ *
+ * A shell script stands in for the real CLI so the assertion is about argv
+ * order and nothing else.
+ */
+test("binary-discovery", "readHelp puts the subcommand before the help flag", async () => {
+  const dir = scratch("help-order");
+  // The fake must be spawnable by `child_process.spawn` without a shell, which
+  // rules out a shebang script (Windows: ENOENT) and a `.cmd` (also ENOENT —
+  // no shell means no batch handler). A small Node program is the one form
+  // that works everywhere, and it reads argv the same way a real CLI does.
+  const script = path.join(dir, "fake-cli.mjs");
+  fs.writeFileSync(
+    script,
+    [
+      "const [, , first] = process.argv;",
+      'if (first === "exec") {',
+      '  console.log("SUBCOMMAND HELP --json --sandbox RESUME");',
+      "} else {",
+      '  console.log("TOP LEVEL HELP Commands: exec resume");',
+      "}",
+      "",
+    ].join("\n")
+  );
+  const fake = process.execPath;
+  const argv = [script];
+
+  const sub = await readHelp(fake, [...argv, "exec"]);
+  assert(sub !== null, "the probe must return something");
+  assert(sub.includes("SUBCOMMAND HELP"), `expected the subcommand surface, got: ${sub}`);
+  assert(sub.includes("--json"), "the subcommand surface is where --json is advertised");
+
+  // And the flag does not leak when no subcommand is asked for.
+  const top = await readHelp(fake, argv);
+  assert(top !== null, "a bare probe must still work");
+  assert(top.includes("TOP LEVEL HELP"), `expected the top-level surface, got: ${top}`);
+  assert(!top.includes("--json"), "the top-level surface does not advertise the subcommand's flags");
+
+  // helpMentions is what turns that text into a capability fact.
+  assert(helpMentions(sub, "--json"), "--json must be detected from the subcommand help");
+  assert(!helpMentions(top, "--json"), "--json must not be detected from the top-level help");
 });
 
 await report();

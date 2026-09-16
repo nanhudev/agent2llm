@@ -180,11 +180,19 @@ export async function runForOutput(
   };
 }
 
-/** Best-effort `--help` probe used to avoid inventing CLI flags. */
-export async function readHelp(bin: string, extraArgs: readonly string[] = []): Promise<string | null> {
-  for (const args of [["--help", ...extraArgs], ["-h", ...extraArgs]]) {
+/**
+ * Best-effort `--help` probe used to avoid inventing CLI flags.
+ *
+ * `path` names a subcommand chain, in order: `readHelp(bin, ["exec"])` runs
+ * `bin exec --help`. The subcommand must precede the help flag — the opposite
+ * order (`bin --help exec`) asks the top-level parser for its own help and
+ * silently returns the wrong surface, which is how a build that advertises
+ * `--json` under `exec` gets recorded as not supporting it.
+ */
+export async function readHelp(bin: string, path: readonly string[] = []): Promise<string | null> {
+  for (const flag of ["--help", "-h"]) {
     try {
-      const result = await runForOutput({ bin, args: [...args], cwd: process.cwd(), timeoutMs: 12_000 });
+      const result = await runForOutput({ bin, args: [...path, flag], cwd: process.cwd(), timeoutMs: 12_000 });
       if (result.output.trim() !== "") return result.output;
     } catch {
       // try next form
