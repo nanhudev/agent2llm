@@ -1,6 +1,6 @@
 # Agent2LLM
 
-[![CI](https://github.com/nanhudev/agent2llm/actions/workflows/ci.yml/badge.svg)](https://github.com/nanhudev/agent2llm/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/badge/CI-ready-blue)](./.github/ci/github-actions.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 [![协议](https://img.shields.io/badge/protocol-a2l%2F1-blue.svg)](./docs/protocol/a2l-protocol.md)
@@ -290,6 +290,22 @@ npm test            # 协议 / 契约 / 安全 / 编排，共 67 项
 npm run lint
 npm run verify
 ```
+
+### 启用 CI
+
+CI 配置随仓库分发在 [`.github/ci/github-actions.yml`](.github/ci/github-actions.yml)
+（Linux / Windows / macOS × Node 20 / 22），而没有放在 `.github/workflows/` 下——
+因为 GitHub 把该目录视为受保护路径，凭据不带 `workflow` scope 时，任何触及它的 push
+都会被拒绝。启用方式：
+
+```bash
+node scripts/enable-ci.mjs    # 复制到 .github/workflows/ci.yml
+git add .github/workflows/ci.yml
+git commit -m "ci: enable GitHub Actions workflow"
+```
+
+最后那次 push 需要同时具备 `repo` 和 `workflow` 两个 scope 的 token，
+在 <https://github.com/settings/tokens> 生成。
 
 ## 文档
 

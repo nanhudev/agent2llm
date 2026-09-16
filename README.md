@@ -1,6 +1,6 @@
 # Agent2LLM
 
-[![CI](https://github.com/nanhudev/agent2llm/actions/workflows/ci.yml/badge.svg)](https://github.com/nanhudev/agent2llm/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/badge/CI-ready-blue)](./.github/ci/github-actions.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 [![Protocol](https://img.shields.io/badge/protocol-a2l%2F1-blue.svg)](./docs/protocol/a2l-protocol.md)
@@ -295,6 +295,22 @@ npm test            # protocol, contract, security, orchestrator — 67 assertio
 npm run lint
 npm run verify
 ```
+
+### Enabling CI
+
+The workflow ships at [`.github/ci/github-actions.yml`](.github/ci/github-actions.yml)
+(Linux / Windows / macOS × Node 20 / 22) instead of under `.github/workflows/`,
+because GitHub rejects any push that touches that directory unless the credential
+carries the `workflow` scope. To switch it on:
+
+```bash
+node scripts/enable-ci.mjs    # copies it to .github/workflows/ci.yml
+git add .github/workflows/ci.yml
+git commit -m "ci: enable GitHub Actions workflow"
+```
+
+That last push needs a token with both `repo` and `workflow` scopes —
+create one at <https://github.com/settings/tokens>.
 
 ## Docs
 
