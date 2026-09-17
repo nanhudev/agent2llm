@@ -36,6 +36,16 @@ All notable changes are documented here. Format follows
     (with its reason), or not measured — never a fabricated 0; the test
     count is a number or an honest null; measured text sizes are labelled
     as estimates; and there is no cost figure anywhere.
+- **Single-executable packaging (Windows `.exe`, macOS `.dmg`, Linux binary).**
+  `npm run package:sea` builds a self-contained executable with Node SEA
+  (`scripts/package-sea.mjs`): an extra CommonJS bundle in which zod, express,
+  ignore and the MCP SDK are embedded (an executable has no node_modules),
+  while playwright stays external and degrades to the manual transport. A
+  tag-triggered `.github/workflows/release.yml` builds the Windows exe, a
+  macOS `.dmg` (hdiutil) and a Linux binary, runs a mock goal through each
+  packaged executable before it is uploaded, and only uploads artifacts — it
+  never cuts a release. The binaries are unsigned: SmartScreen/Gatekeeper
+  will warn on first run, and that is stated rather than papered over.
 
 ### Changed
 
@@ -68,6 +78,13 @@ All notable changes are documented here. Format follows
   (`dsh: UNKNOWN_MODEL: …`) and nothing on stdout, the failure sentence
   claimed there was "no readable message". The summary now falls back to the
   last meaningful stderr line when stdout has none.
+- **The browser-capability probe survives CommonJS output.** The probe's
+  `createRequire(import.meta.url)` ran at module load; in the CommonJS bundle
+  used by the single-executable build esbuild empties `import.meta`, which
+  would have crashed the CLI before any command ran. It now falls back to the
+  executable itself, where the probe answers `installed:false` — the honest
+  answer for a binary without node_modules (CDP attach and the manual
+  transport keep working). The ESM build, the one npm ships, is unaffected.
 - **Usage terminology: harness model usage is unknown, not zero.** The 0.2.0
   notes said the harness side of every run is "0 brain tokens by construction,
   because execution never consults a model". Agent2LLM cannot know that: a
