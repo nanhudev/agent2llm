@@ -7,7 +7,7 @@
  * A reader can audit what reaches the page by reading this file alone.
  */
 import { esc } from "./dom.js";
-import type { CatalogAdapter, CatalogView, DockState, PairView } from "./wire.js";
+import type { ApiError, CatalogAdapter, CatalogView, DockState, PairView } from "./wire.js";
 
 export function pairCard(pair: PairView): string {
   const context = pair.context ? pair.context.root : "(no context yet)";
@@ -80,6 +80,29 @@ export function renderCreateForm(catalog: CatalogView): void {
     `<select data-harness aria-label="Harness">${options(harnesses)}</select></div>` +
     `<div class="row"><input type="text" data-workspace placeholder="Workspace folder (optional)"></div>` +
     `<div class="row"><button data-create>Create pair</button><span class="meta" data-create-out></span></div>`;
+}
+
+/**
+ * A failed run, as an answer rather than a dead end.
+ *
+ * The shape is deliberate: **what** failed (the server's own sentence),
+ * **where** (the pair it was asked of), and **next** (the server's hint when
+ * it has one — never advice invented here). The raw message stays reachable
+ * in a collapsed details block, because sometimes the sentence above it is
+ * not the sentence a person needed.
+ */
+export function renderRunError(out: HTMLElement, pairId: string, error: ApiError): void {
+  const next =
+    error.hint ??
+    "Re-run the goal, or run it from a terminal, where an approval prompt can be answered.";
+  out.innerHTML =
+    '<div class="err">' +
+    '<div class="err-title">Run failed</div>' +
+    `<div><strong>What:</strong> ${esc(error.message)}</div>` +
+    `<div><strong>Where:</strong> pair <code>${esc(pairId)}</code></div>` +
+    `<div><strong>Next:</strong> ${esc(next)}</div>` +
+    `<details><summary>Details</summary><pre>${esc(error.message)}</pre></details>` +
+    "</div>";
 }
 
 /**

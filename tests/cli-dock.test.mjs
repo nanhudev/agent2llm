@@ -290,6 +290,14 @@ test("cli-dock", "an incomplete or unknown request names what is wrong", async (
 
   const empty = await post(JSON.stringify({ pairId: "a2lp_nope", goal: "   " }));
   assertEqual(empty.status, 400, "a blank goal is not a goal");
+
+  // A failure a user can act on says what to do next — and names a command
+  // that actually exists.
+  const missing = await post(JSON.stringify({ pairId: "a2lp_nope", goal: "x" }));
+  const missingBody = await missing.json();
+  assert(typeof missingBody.hint === "string" && missingBody.hint.length > 0,
+    `the 404 carries a next step: ${JSON.stringify(missingBody)}`);
+  assert(/pair list/.test(missingBody.hint), "the hint names the way to check pairs");
 });
 
 test("cli-dock", "the Run button runs the real relay path and reports the real status", async () => {

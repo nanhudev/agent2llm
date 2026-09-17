@@ -50,7 +50,7 @@
 import http from "node:http";
 import { randomBytes } from "node:crypto";
 import type { AdapterRegistry, UserActionRequest } from "@agent2llm/adapter-sdk";
-import { CLI_VERSION } from "@agent2llm/config";
+import { CLI_PRIMARY_NAME, CLI_VERSION } from "@agent2llm/config";
 import { pairsStore, runsStore } from "./pair-select.js";
 import { runRelayGoal } from "./relay-goal.js";
 import { handleCreatePair } from "./dock-pairs.js";
@@ -90,6 +90,29 @@ interface RunState {
   events: string[];
   /** Harness approval requests the dock could not answer. */
   pending: string[];
+}
+
+/**
+ * The next step for the failures a dock user can act on themselves.
+ *
+ * An error that says only what broke leaves the reader with the "now what".
+ * Only failures with a genuine next step get a hint; inventing one for the
+ * rest would be advice the page cannot back up. Every command named here is
+ * spelled through `CLI_PRIMARY_NAME`, so a rename cannot leave the page
+ * recommending a command that does not exist.
+ */
+function hintFor(status: number, error: string): string | undefined {
+  if (status === 409) return "Wait for the current run to finish; the live panel shows when it is done.";
+  if (status === 404) return `Create the pair on this page, or check '${CLI_PRIMARY_NAME} pair list'.`;
+  if (/no context to work in/i.test(error)) {
+    return "Start the Harness with a project folder open, or create the pair with a workspace.";
+  }
+  return undefined;
+}
+
+function errorBody(status: number, error: string): { error: string; hint?: string } {
+  const hint = hintFor(status, error);
+  return hint ? { error, hint } : { error };
 }
 
 /**
@@ -157,7 +180,7 @@ export async function startDock(registry: AdapterRegistry, options: DockOptions 
   async function handleRun(req: http.IncomingMessage, res: http.ServerResponse, port: number): Promise<void> {
     if (!gatePost(req, res, port, "run")) return;
     if (state.busy) {
-      json(res, 409, { error: "A run is already in progress. Two harnesses in one working tree is a corruption." });
+      json(res, 409, errorBody(409, "A run is already in progress. Two harnesses in one working tree is a corruption."));
       return;
     }
 
@@ -175,7 +198,7 @@ export async function startDock(registry: AdapterRegistry, options: DockOptions 
       return;
     }
     if (!pairsStore().get(pairId)) {
-      json(res, 404, { error: `No pair '${pairId}'.` });
+      json(res, 404, errorBody(404, `No pair '${pairId}'.`));
       return;
     }
 
@@ -197,7 +220,7 @@ export async function startDock(registry: AdapterRegistry, options: DockOptions 
         },
       });
       if (!outcome.ok) {
-        json(res, 400, { error: outcome.error });
+        json(res, 400, errorBody(400, outcome.error));
         return;
       }
       json(res, 200, {
@@ -209,7 +232,8 @@ export async function startDock(registry: AdapterRegistry, options: DockOptions 
           : {}),
       });
     } catch (error) {
-      json(res, 500, { error: (error as Error).message });
+      const message = (error as Error).message;
+      json(res, 500, errorBody(500, message));
     } finally {
       state.busy = false;
     }

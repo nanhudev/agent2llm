@@ -14,6 +14,23 @@ export function setToken(value: string): void {
   token = value;
 }
 
+/**
+ * A failed request, carrying what the server said about it.
+ *
+ * `hint` is the server's next step for errors a user can act on; absent for
+ * the rest, because the page will not invent advice it cannot back up.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly hint?: string;
+
+  constructor(status: number, message: string, hint?: string) {
+    super(message);
+    this.status = status;
+    this.hint = hint;
+  }
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${path}?token=${encodeURIComponent(token)}`, {
     ...options,
@@ -21,7 +38,13 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   });
   const body: unknown = await response.json().catch(() => ({}));
   const record = (body ?? {}) as Record<string, unknown>;
-  if (!response.ok) throw new Error(String(record.error ?? `HTTP ${response.status}`));
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      String(record.error ?? `HTTP ${response.status}`),
+      typeof record.hint === "string" ? record.hint : undefined
+    );
+  }
   return body as T;
 }
 
@@ -68,9 +91,11 @@ export interface CreatePairResult {
 }
 
 export interface RunResult {
+  runId: string;
   status: string;
   summary: string;
   iterations: number;
   metrics: { filesChanged: number; elapsedMs: number };
   conversation: { reused: boolean };
+  pendingApprovals?: string[];
 }

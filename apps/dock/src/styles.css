@@ -29,4 +29,9 @@
   pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); border:1px solid var(--line);
         border-radius:7px; padding:10px 12px; font-size:12.5px; margin:10px 0 0; }
   .empty { color:var(--muted); }
+  .err { border:1px solid var(--bad); border-radius:7px; padding:10px 12px; margin-top:10px;
+         font-size:13.5px; }
+  .err-title { font-weight:600; color:var(--bad); margin-bottom:6px; }
+  .err details { margin-top:8px; }
+  .err pre { margin-top:6px; }
   footer { color:var(--muted); font-size:12.5px; margin-top:26px; }

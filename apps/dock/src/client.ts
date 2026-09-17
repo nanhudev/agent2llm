@@ -23,8 +23,8 @@
  */
 import { byId, esc } from "./dom.js";
 import { api, setToken } from "./wire.js";
-import type { CatalogView, CreatePairResult, DockState, RunResult } from "./wire.js";
-import { formatLive, render, renderCreateForm } from "./view.js";
+import type { ApiError, CatalogView, CreatePairResult, DockState, RunResult } from "./wire.js";
+import { formatLive, render, renderCreateForm, renderRunError } from "./view.js";
 
 /** How often the page asks the server what is happening while a run executes. */
 const POLL_MS = 1500;
@@ -114,7 +114,7 @@ async function runGoal(card: HTMLElement, button: HTMLButtonElement): Promise<vo
       method: "POST",
       body: JSON.stringify({ pairId, goal }),
     });
-    out.textContent =
+    let text =
       result.status.toUpperCase() +
       " — " +
       result.summary +
@@ -126,8 +126,19 @@ async function runGoal(card: HTMLElement, button: HTMLButtonElement): Promise<vo
       (result.metrics.elapsedMs / 1000).toFixed(1) +
       "s" +
       (result.conversation.reused ? " · continued the same Brain conversation" : " · new Brain thread");
+    if (result.pendingApprovals && result.pendingApprovals.length > 0) {
+      // The dock could not answer these: a page has nobody to prompt. Saying
+      // so plainly is the difference between "blocked" and "mysteriously
+      // stopped".
+      text +=
+        "\n\nThe harness asked for a human:" +
+        "\n  " +
+        result.pendingApprovals.join("\n  ") +
+        "\nThis page cannot answer approvals — re-run the goal from a terminal, where the prompt can be answered.";
+    }
+    out.textContent = text;
   } catch (error) {
-    out.textContent = "Failed: " + (error as Error).message;
+    renderRunError(out, pairId, error as ApiError);
   } finally {
     polling = false;
     clearInterval(poll);
