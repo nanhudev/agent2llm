@@ -38,6 +38,9 @@
       "path": "packages/session"
     },
     {
+      "path": "packages/pairs"
+    },
+    {
       "path": "packages/mcp"
     },
     {

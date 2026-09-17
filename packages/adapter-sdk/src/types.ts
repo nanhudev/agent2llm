@@ -131,6 +131,19 @@ export interface VerificationResult {
 
 // ---- Execution --------------------------------------------------------------
 
+/**
+ * How much latitude the Harness is given for one dispatch.
+ *
+ * `standard` is the original behaviour: a goal, a list of steps, and whatever
+ * the product chooses to do about them. `execution-only` is Relay Mode's
+ * contract — the Brain has already reasoned, and the Harness is expected to
+ * execute the named step and stop.
+ */
+export type ExecutionMode = "execution-only" | "standard";
+
+/** Whether a harness may write documents nobody asked for. */
+export type DocumentationPolicy = "if-required" | "never";
+
 export interface ExecutionRequest {
   taskId: string;
   iteration: number;
@@ -141,6 +154,20 @@ export interface ExecutionRequest {
   filesLikelyInvolved?: string[];
   /** Workspace root the harness must operate in. */
   workspaceRoot: string;
+  /**
+   * Relay dispatch: the one step the Brain wants executed now, verbatim.
+   *
+   * Separate from `instructions` so a harness can send a short brief without
+   * also sending the whole run's goal and history. When present, it is what
+   * the harness should act on.
+   */
+  nextAction?: string;
+  /** How that step will be judged. Shown to the harness, not interpreted by it. */
+  acceptance?: string[];
+  executionMode?: ExecutionMode;
+  /** Suppress unrequested plans, progress reports and summary documents. */
+  cleanExecution?: boolean;
+  documentation?: DocumentationPolicy;
 }
 
 export interface ExecutionHandle {
@@ -195,7 +222,37 @@ export interface HarnessAdapter extends AdapterCommon {
   events(handle: ExecutionHandle): AsyncIterable<HarnessEvent>;
   cancel(handle: ExecutionHandle): Promise<void>;
   close(session: HarnessSession): Promise<void>;
+  /**
+   * Where is this product currently working?
+   *
+   * Optional, and worth implementing: the whole point of a harness-owned
+   * context is that the user should not have to name a folder the Harness
+   * already has open. Return `null` when the product does not advertise it —
+   * `undefined` and "I could not tell" must be distinguishable from a real
+   * answer, and only a real answer is allowed to become a context.
+   *
+   * `Task.execute`-only harnesses can ignore this entirely.
+   */
+  getActiveContext?(): Promise<HarnessContextReport | null>;
 }
+
+/**
+ * What an adapter reports about its active context, before normalisation.
+ *
+ * Structurally identical to `ReportedContext` in `@agent2llm/pairs`, on
+ * purpose: the SDK owns the *contract an adapter satisfies*, the domain
+ * package owns normalisation and storage. The duplication is five fields and
+ * any drift fails to compile at the call site.
+ */
+export interface HarnessContextReport {
+  /** Absolute path of the project the product has open. */
+  root?: string;
+  displayName?: string;
+  /** 0..1, only when the adapter can genuinely estimate it. */
+  confidence?: number;
+  detail?: Record<string, string | number | boolean>;
+}
+
 
 export type AnyAdapter = BrainAdapter | HarnessAdapter;
 
