@@ -5,6 +5,7 @@
  * rendering. Deliberately not "cyberpunk" — the output should read like a
  * professional tool.
  */
+import { writeSync } from "node:fs";
 import readline from "node:readline";
 
 export const supportsColor = (): boolean =>
@@ -178,7 +179,24 @@ export async function requestUserAction(action: {
 }
 
 export function jsonOutput(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  // Synchronous write on purpose. main() calls process.exit() the moment the
+  // command resolves, and on a pipe `process.stdout.write` is async — a
+  // payload larger than the first pipe chunk was observed to lose everything
+  // after byte 8192 when the process exited before the stream drained
+  // (macOS runner, node 20, `adapters --json`). --json is a machine
+  // contract, so it must be written with no buffer that an exit can kill.
+  const buffer = Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
+  let offset = 0;
+  while (offset < buffer.length) {
+    try {
+      offset += writeSync(1, buffer, offset, buffer.length - offset);
+    } catch (error) {
+      // A non-blocking stdout briefly reports EAGAIN; a retry is how the
+      // bytes eventually go out. Any other error is a real failure.
+      if ((error as NodeJS.ErrnoException).code === "EAGAIN") continue;
+      throw error;
+    }
+  }
 }
 
 export function errorOutput(error: unknown): void {
