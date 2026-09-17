@@ -42,8 +42,9 @@ export function usage(): void {
   ui.line(`    ${CLI_NAME} adapters|brains|harnesses [--json] [--quick]`);
   ui.line(`    ${CLI_NAME} session list|show|resume|stop [id]`);
   ui.line(`    ${CLI_NAME} workspace list|add|remove [path|id]`);
-  ui.line(`    ${CLI_NAME} pair <workspace> | unpair [workspace]`);
+  ui.line(`    ${CLI_NAME} bridge pair <workspace> | bridge unpair [workspace]`);
   ui.line(ui.dim("      Device pairing with the bridge — a different 'pair' from the one above."));
+  ui.line(ui.dim(`      (The old ${CLI_NAME} pair <workspace> / unpair spelling still works, deprecated.)`));
   ui.line(`    ${CLI_NAME} logs [--json] [--lines N]`);
   ui.line(`    ${CLI_NAME} report [--json]`);
   ui.line(`    ${CLI_NAME} config [--json] | config set <key> <value>`);
