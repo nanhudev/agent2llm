@@ -165,9 +165,25 @@ export async function startDock(registry: AdapterRegistry, options: DockOptions 
     }
 
     // What the creation form offers: every registered adapter, with its role,
-    // so the page cannot invent an id that does not exist.
+    // plus what detection actually found on this machine — so the page can
+    // group "on this machine" apart from "needs setup" instead of implying
+    // every entry is ready to run. Quick probe: a form only needs presence.
     if (req.method === "GET" && url.pathname === "/api/catalog") {
-      json(res, 200, { adapters: registry.descriptors() });
+      const detections = await registry.detectAll(true);
+      json(res, 200, {
+        adapters: detections.map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          role: entry.role,
+          experimental: entry.experimental,
+          ...(entry.drives ? { drives: entry.drives } : {}),
+          detection: {
+            status: entry.detection.status,
+            ...(entry.detection.version ? { version: entry.detection.version } : {}),
+            ...(entry.detection.reason ? { reason: entry.detection.reason } : {}),
+          },
+        })),
+      });
       return;
     }
 

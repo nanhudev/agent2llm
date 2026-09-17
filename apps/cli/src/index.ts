@@ -53,6 +53,8 @@ const BOOLEAN_FLAGS = new Set([
   "dry-run",
   "ignore-auth",
   "relay",
+  "all",
+  "no-open",
 ]);
 
 function parseArgs(argv: string[]): Flags {
@@ -165,7 +167,9 @@ async function main(): Promise<number> {
         return 0;
 
       case "adapters":
-        await runAdapters(registry, { json, quick: bool(flags.quick) });
+        // Default view: what this machine can use today. --all is the full
+        // registry with statuses, for the reader who wants the whole map.
+        await runAdapters(registry, { json, quick: bool(flags.quick), all: bool(flags.all) });
         return 0;
 
       case "brains":

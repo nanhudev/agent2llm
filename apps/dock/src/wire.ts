@@ -78,6 +78,12 @@ export interface CatalogAdapter {
   name: string;
   role: string;
   experimental: boolean;
+  /**
+   * What detection actually found on this machine, when the server looked.
+   * Absent means the server did not look (an older dock) — the form then
+   * renders one flat list instead of claiming a grouping it cannot back.
+   */
+  detection?: { status: string; version?: string | null; reason?: string };
 }
 
 export interface CatalogView {

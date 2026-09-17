@@ -62,7 +62,14 @@ export function render(state: DockState, emptyHint: string): void {
     : "No runs yet.";
 }
 
-/** The creation form: two selects drawn from the real registry, nothing invented. */
+/**
+ * The creation form: two selects drawn from the real registry, nothing
+ * invented — and, when the server reported what detection found, grouped so
+ * the entries that can run today are visibly apart from the ones that still
+ * need a product installed. An adapter the user does not have is not removed
+ * from the list (it is still joinable after setup) but it is labelled, so
+ * picking one is a decision, not a surprise.
+ */
 export function renderCreateForm(catalog: CatalogView): void {
   const host = document.getElementById("newpair");
   if (!host) throw new Error("the page is missing #newpair");
@@ -74,15 +81,25 @@ export function renderCreateForm(catalog: CatalogView): void {
       "This CLI has no registered adapters to join, so a pair cannot be made here. Run a2l adapters to see what it has.";
     return;
   }
-  const options = (list: CatalogAdapter[]) =>
-    list
-      .map(
-        (adapter) =>
-          `<option value="${esc(adapter.id)}">${esc(adapter.name || adapter.id)}${
-            adapter.experimental ? " (experimental)" : ""
-          }</option>`
-      )
-      .join("");
+  const ready = (adapter: CatalogAdapter): boolean =>
+    adapter.detection?.status === "verified" ||
+    adapter.detection?.status === "detected" ||
+    adapter.detection?.status === "configured" ||
+    adapter.detection?.status === "authenticated";
+  const option = (adapter: CatalogAdapter): string =>
+    `<option value="${esc(adapter.id)}">${esc(adapter.name || adapter.id)}${
+      adapter.experimental ? " (experimental)" : ""
+    }${ready(adapter) ? "" : " — not installed"}</option>`;
+  const options = (list: CatalogAdapter[]): string => {
+    const grouped = list.some((adapter) => adapter.detection !== undefined);
+    if (!grouped) return list.map(option).join("");
+    const group = (label: string, items: CatalogAdapter[]): string =>
+      items.length ? `<optgroup label="${esc(label)}">${items.map(option).join("")}</optgroup>` : "";
+    return (
+      group("On this machine", list.filter(ready)) +
+      group("Needs setup", list.filter((adapter) => !ready(adapter)))
+    );
+  };
   host.className = "";
   host.innerHTML =
     `<div class="row"><select data-brain aria-label="Brain">${options(brains)}</select>` +

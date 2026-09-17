@@ -41,7 +41,10 @@ export function usage(): void {
   ui.line(`    ${CLI_PRIMARY_NAME} setup [--brain X] [--harness Y] [--tunnel]`);
   ui.line(`    ${CLI_PRIMARY_NAME} detect [--json] [--quick]`);
   ui.line(`    ${CLI_PRIMARY_NAME} doctor [--json]`);
-  ui.line(`    ${CLI_PRIMARY_NAME} adapters|brains|harnesses [--json] [--quick]`);
+  ui.line(`    ${CLI_PRIMARY_NAME} adapters [--json] [--quick] [--all]`);
+  ui.line(ui.dim("      Default: only the adapters this machine can use today. --all lists"));
+  ui.line(ui.dim("      the ones that still need setup, too."));
+  ui.line(`    ${CLI_PRIMARY_NAME} brains|harnesses [--json] [--quick]`);
   ui.line(`    ${CLI_PRIMARY_NAME} session list|show|resume|stop [id]`);
   ui.line(`    ${CLI_PRIMARY_NAME} workspace list|add|remove [path|id]`);
   ui.line(`    ${CLI_PRIMARY_NAME} bridge pair <workspace> | bridge unpair [workspace]`);

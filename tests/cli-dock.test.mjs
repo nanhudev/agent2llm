@@ -203,6 +203,10 @@ test("cli-dock", "the catalog lists what can actually be joined, and is token-ga
   assert(ids.includes("mock-harness"), "and the registered harnesses");
   const brain = body.adapters.find((adapter) => adapter.id === "mock-brain");
   assertEqual(brain.role, "brain", "each entry carries its role, so a form cannot cross the sides");
+  assert(brain.detection && typeof brain.detection.status === "string",
+    "each entry carries what detection found, so the form can group honestly");
+  assertEqual(brain.detection.status, "verified",
+    "the mock brain is installed by construction, and the catalog says so rather than guessing");
 });
 
 test("cli-dock", "a pair can be created from the page, through the pair-create path", async () => {
