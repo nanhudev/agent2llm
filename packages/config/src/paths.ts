@@ -77,4 +77,4 @@ export const CLI_ALIAS = "a2l";
  * `DEFAULT_HOST`/`DEFAULT_PORT` so a later change to those cannot silently move
  * the dock off loopback.
  */
-export const CLI_VERSION = "0.1.0";
+export const CLI_VERSION = "0.2.0";

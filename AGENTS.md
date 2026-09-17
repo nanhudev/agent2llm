@@ -52,6 +52,29 @@ agent2llm run --brain mock-brain --harness mock-harness --goal smoke
   list full of `false` means "not measured", not "broken". Re-run without
   `--quick` before concluding anything about a harness.
 
+## Relay Mode (one conversation, many goals)
+
+If the human wants a standing collaborator rather than a single plan:
+
+```bash
+agent2llm pair create --brain <brain> --harness <harness>
+agent2llm run "first goal"
+agent2llm run "second goal"     # the same Brain conversation as the first
+agent2llm dock                  # optional: local page listing the pairs
+```
+
+- `--brain X --harness Y` **without** `--relay` still means brain-hands,
+  unchanged. Do not add `--relay` to an existing command because it looks newer.
+- A Relay dispatch is execution-only: the harness receives one step and its
+  acceptance criteria, never the run's goal. Do not put a plan, a rationale or
+  a project description in the step text — that is what re-opens the planning
+  the mode exists to prevent.
+- `blocked` is a real answer, not a crash. It means the repository contradicted
+  the run, or every dispatch failed. Read the summary: it quotes the harness's
+  own error.
+- Never invent a token number for a web Brain. Subscription-metered Brains
+  report nothing, and the run records that as `unavailable` with a reason.
+
 ## Wiring a real brain (what the human probably wants next)
 
 Ask the human which brain and harness they want, then:
@@ -75,8 +98,11 @@ agent2llm setup --brain <brain> --harness <harness>
 - The harness never plans and never reviews. If a run needs thinking, the
   brain does it and the harness executes. Do not try to make a harness
   "just this once" do both.
-- `agent2llm report` shows what a run consumed (token usage where the
-  provider reports it, estimated otherwise). Use it instead of guessing.
+- `agent2llm report` shows what a run consumed: provider-reported tokens where a
+  provider reports them, `unavailable` with a reason where it does not, and
+  byte-derived *estimated text tokens* that are labelled as estimates. Those
+  three are never mixed, and an estimate must never be restated as a token
+  count. Use the output instead of guessing.
 
 ## If something fails
 

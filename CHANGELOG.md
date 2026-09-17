@@ -6,6 +6,62 @@ All notable changes are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-17
+
+Everything below this heading was written after the 0.1.0 tag and is shipping
+for the first time in 0.2.0.
+
+### Relay Mode — one conversation, many goals
+
+- **`a2l pair` and a relay-aware `a2l run`.** A Pair is the durable thing: it
+  holds the Brain's conversation pointer, the Harness identity, the resolved
+  context and the execution policy. `a2l run "goal"` uses the active pair, so
+  run 4 continues the same Brain thread run 1 opened. `--brain X --harness Y`
+  without `--relay` still means brain-hands, byte for byte.
+- **Execution-only dispatch.** A Relay step is sent as a `NEXT_ACTION` plus its
+  acceptance criteria, and deliberately without the run's goal — handing a
+  Harness a goal is an invitation to re-derive the plan the Brain already made.
+  Asserted negatively in `tests/relay.test.mjs`: the brief must not contain the
+  goal string.
+- **Evidence read from git, not from the Harness.** After each dispatch,
+  Agent2LLM collects the real working-tree state and forms a verdict
+  (`corroborated` / `unverified` / `contradicted`) before the Brain is told
+  anything. A Harness that claims files in a clean tree is recorded as
+  contradicting itself. `SHOW_DIFF <path>` answers an on-demand detail request
+  from the repository, under a bounded request count.
+- **The run status is the record, not the Brain's verdict.** `contradicted`
+  evidence, and separately *every* dispatch failing, both resolve to `blocked`.
+  The second rule was found by running against real Codex: two dispatches came
+  back `403 Forbidden` and the run still reported `done` with exit code 0.
+- **Harness-owned context.** `getActiveContext()` is an optional adapter hook.
+  Codex implements it by reading the newest rollout's `session_meta` `cwd` under
+  `$CODEX_HOME/sessions`, skipping Codex-managed roots and refusing roots that
+  no longer exist; WorkBuddy reports `null` rather than reversing a lossy slug
+  path. A pair follows the Harness when it moves to a new folder and says so
+  when another pair already covers that folder.
+- **A folder you name wins.** `--workspace` outranks the Harness's report in
+  every mode. It previously lost to the Harness in relay mode, which made
+  `a2l run "..." --workspace D:\my-repo` edit whatever folder Codex last had
+  open and report success. The CLI now also names the folder it ignored.
+- **`a2l dock`** — a page on `127.0.0.1` listing pairs with a goal box each.
+  Loopback only (there is no `--host`), one-time token on every route,
+  JSON-only bodies, no CORS, no cookies, cross-origin POST refused, and 409
+  rather than a queue for a second concurrent run. It holds no window handle at
+  all, so it cannot move or reparent another application's window.
+- **Honest metrics.** Provider-reported tokens where a provider reports them;
+  `unavailable` with a reason where it does not (a web Brain is
+  subscription-metered); byte-derived *estimated text tokens* labelled as
+  estimates, never presented as a billing figure.
+- **`npm run e2e:relay`** — end-to-end acceptance against a scratch git
+  repository and a real harness, reading every claim back out of git and the
+  run record. Deliberately not part of `npm test`: it spends provider quota and
+  needs a signed-in harness, so a failure is a fact about the machine — and the
+  script reports which, per check, with an explicit `not applicable` state.
+- **`A2L_MOCK_BRAIN_SCRIPT`** lets the mock Brain read its plan from a JSON file
+  so the real CLI can drive it; a malformed script throws rather than falling
+  back, because a run that quietly executed a different plan than the one on
+  disk cannot be cited as evidence.
+
 ### Added
 
 - **Installable npm package.** `npm install -g agent2llm` now works: the CLI
@@ -92,6 +148,22 @@ All notable changes are documented here. Format follows
   reading capabilities forces the full probe.
 
 ### Fixed
+
+- **`ui.fail` / `ui.warn` / `ui.ok` printed nothing at all.** They were colour
+  helpers that returned a string, and eighteen call sites used them as printers:
+  `a2l run` with no adapters installed, `a2l config set <bad-key>` and
+  `a2l session stop <bad-id>` all failed in total silence. A name that can be
+  either a value or an action cannot be told apart at the call site, so colouring
+  moved to `red`/`yellow`/`green`/`cyan` and the three outcome printers now speak.
+- **A CLI harness reported "not installed" for a binary it was about to run.**
+  `execute()` called `requireBinary()` before `resolveFlags()`, so an adapter
+  that had not probed answered before anything had looked. brain-hands never
+  noticed because it probes by accident — `assertCompatible` asks for
+  `capabilities()` — but Relay negotiates no capabilities, so every dispatch
+  failed with an install error for a binary `a2l detect` named by path.
+- **A boolean flag ate the argument after it.** `a2l run --relay "fix the login
+  bug"` parsed as `relay: "fix the login bug"` and the goal disappeared. Boolean
+  flags are now declared, and `--flag=true` still works.
 
 - **Detection reported "not measured" as a fact, and called a working harness
   broken.** Every `detectAll` caller passed `quick: true`, which skips both the

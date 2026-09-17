@@ -7,19 +7,108 @@
 
 English · [简体中文](./README.zh-CN.md)
 
-Use ChatGPT or Claude as the reasoning brain behind DeepSeek Harness, WorkBuddy,
-Codex, Cursor, Claude Code or OpenCode.
+**Your best model thinks. Your favorite agent builds.**
+
+Use ChatGPT or Claude as the reasoning brain behind Codex, Cursor, Claude Code,
+WorkBuddy, DeepSeek Harness or OpenCode — and keep **one conversation across
+many small executions** instead of re-explaining the project every time.
 
 ```text
 N Brain Adapters  ×  M Harness Adapters  =  N × M composability
 ```
 
+Two workflows ship today. They make different promises, so pick deliberately.
+
+| | **Relay Mode** | **Brain / Hands** |
+| --- | --- | --- |
+| The Brain holds | the conversation, across runs | one plan, per run |
+| The Harness is sent | one next step and its acceptance criteria | a goal, and re-derives the plan |
+| The Brain reviews | evidence collected from your repository | a read-only view of the workspace |
+| Reach for it when | you want a standing collaborator | you want a reviewable plan artifact |
+
+## Relay Mode
+
+One conversation, many goals. The Brain keeps the thread; the Harness does one
+step at a time.
+
+```bash
+agent2llm pair create --brain chatgpt-web --harness codex   # once
+agent2llm run "Add a slugify() helper and tests"            # run 1
+agent2llm run "Now make it Unicode-aware"                   # run 2, same thread
+```
+
+Run 2 talks to **the same Brain conversation run 1 used**. That is the whole
+idea: long-term planning accumulates in the conversation instead of being
+rebuilt from scratch on every invocation.
+
+### What the Harness is actually sent
+
+A Relay dispatch is execution-only. The Harness is told what to do and how the
+step will be judged — never what the run is *for*:
+
+```text
+EXECUTION-ONLY MODE
+NEXT ACTION
+  Add a slugify(text) export to src/slugify.js.
+ACCEPTANCE
+  - src/slugify.js exists
+  - 'Hello World' becomes 'hello-world'
+```
+
+The run's goal is deliberately absent. Handing a Harness a goal is an invitation
+to re-derive the plan the Brain already made — and to write a report about it
+that nobody asked for. With no goal in the brief, there is nothing to re-plan.
+
+### The status is the record, not the verdict
+
+The Brain says `DONE`; that is a claim. Agent2LLM reads your repository itself
+after every dispatch and will not report success on the Brain's word alone:
+
+| What was observed | What the run reports |
+| --- | --- |
+| The Harness claims files; git shows a clean tree | `blocked` — the repository contradicts it |
+| Every dispatch failed | `blocked` — with the Harness's own error, verbatim |
+| Nothing moved, nothing claimed, Brain says done | `done` — there was no execution to weigh |
+
+The third row is not a loophole: a Brain that answers `DONE` without asking for
+anything is saying the work was already done, and the metrics will show
+`0 execution(s)` beside it.
+
+### The dock
+
+```bash
+agent2llm dock
+```
+
+A page on `127.0.0.1` listing your pairs with a goal box each. It is a page and
+not a desktop window on purpose: it holds **no handle to any window**, so it
+cannot move, resize or reparent the coding agent you have open next to it.
+Loopback only, one-time token, JSON-only bodies, no cookies. See
+[`docs/workflows/relay.md`](docs/workflows/relay.md).
+
+## Brain / Hands
+
+The original workflow, unchanged. The Brain produces a plan, reviews raw
+workspace evidence, and the Harness writes execution reports.
+
+```bash
+agent2llm run \
+  --brain chatgpt-web \
+  --harness dsh \
+  --workflow brain-hands \
+  --workspace . \
+  --goal "Implement dark mode"
+```
+
+`--brain` + `--harness` without `--relay` still means this. Relay is opt-in in
+both directions, so no existing command changed meaning.
+
 ## Why this exists
 
-[XiaoDuoYa/codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt)
+[`XiaoDuoYa/codex-with-chatgpt`](https://github.com/XiaoDuoYa/codex-with-chatgpt)
 showed that a chat box can carry a control plane: ChatGPT plans, Codex executes,
-and a small text protocol moves between them. That work is good, and it is welded
-to Codex — one brain, one harness.
+and a small text protocol moves between them. That work is good, and it is
+welded to Codex — one brain, one harness.
 
 Agent2LLM keeps the idea and drops the welding. Brain and Harness sit on either
 side of an adapter boundary, so any brain can drive any harness:
@@ -28,7 +117,9 @@ side of an adapter boundary, so any brain can drive any harness:
 - Harnesses: `dsh`, `workbuddy`, `codex`, `cursor`, `claude-code`, `opencode`,
   `mock-harness`
 
-Adding one does not change the other. That is the whole design.
+Adding one does not change the other. Relay Mode is what that boundary made
+possible: the conversation can live on the Brain side and the execution on the
+Harness side, and neither has to be able to do the other's job.
 
 ## How it works
 
@@ -52,7 +143,8 @@ is evidence. So the Brain gets a read-only view of the real thing.
 
 The Brain-facing MCP server has no `write_file`, no `shell`, no `git_commit`,
 no `install_package`. Those tools do not exist in it. The Brain decides; the
-Harness acts.
+Harness acts. In Relay Mode the Brain does not even need `workspace.read`: the
+evidence arrives on the protocol.
 
 ## Install
 
@@ -89,16 +181,18 @@ agent2llm doctor          # health checks, with repairs
 agent2llm adapters        # implemented / detected / verified, per adapter
 ```
 
-Non-interactive:
+Relay, end to end:
 
 ```bash
-agent2llm run \
-  --brain chatgpt-web \
-  --harness dsh \
-  --workflow brain-hands \
-  --workspace . \
-  --goal "Implement dark mode"
+agent2llm pair create --brain chatgpt-web --harness codex   # no --workspace needed
+agent2llm pair list
+agent2llm run "Add a slugify() helper and tests"
+agent2llm pair show                                         # the conversation pointer lives here
 ```
+
+The Harness owns the context. If Codex has `D:\my-game` open, the pair is bound
+to it and you are not asked for a folder. `--workspace` overrides that, and the
+CLI says so when the two disagree rather than picking one quietly.
 
 Check a pairing without contacting any product:
 
@@ -106,18 +200,65 @@ Check a pairing without contacting any product:
 agent2llm run --brain chatgpt-web --harness workbuddy --dry-run
 ```
 
-What the thinking actually cost:
+## Measured, not claimed
 
-```bash
+`agent2llm report` and every run print what was actually observed. There are
+three units and they are never mixed:
+
+- **Provider tokens** — what the API Brain's provider billed. Only the `api`
+  brain can report this. Web brains are subscription-metered and report
+  **nothing**; that is recorded as `unavailable` with a reason, never estimated
+  into a number that looks like a measurement.
+- **Estimated text tokens** — byte counts divided by four, labelled as such.
+  Useful for comparing two prompts; not a billing figure.
+- **Execution counts** — `0 brain tokens` on the Harness side is a structural
+  fact, not a measurement: execution never consults a model.
+
+On the evidence size: the one real end-to-end run against Codex collected
+1,340 bytes of evidence and sent the Brain 500 bytes of it. That is a
+measurement of one run, quoted as one run — not a savings percentage, and not
+a projection.
+
+## Commands
+
+```text
+agent2llm pair create|list|show|remove
+agent2llm run "goal"                 Relay Mode — the conversation-centric path
+agent2llm dock                       Local page listing your pairs
+agent2llm setup                      Connect a Brain (official UI, human login)
+agent2llm run --brain B --harness H  Brain / Hands — the original workflow
+agent2llm detect                     Detect installed agents
+agent2llm doctor                     Health checks with repairs
+agent2llm adapters | brains | harnesses
+agent2llm session list|show|resume|stop
+agent2llm workspace list|add|remove
+agent2llm pair <workspace> | unpair  Device pairing with the bridge — a different "pair"
+agent2llm logs
 agent2llm report
+agent2llm config
+agent2llm version
 ```
 
-The Brain is the only side that spends tokens, and it only thinks during
-inspect / plan / review. The report prints what the provider actually billed,
-per session and per phase — and the harness side of every run is 0 brain
-tokens by construction, because execution never consults a model. Web brains
-are subscription-metered and report nothing; nothing is estimated to fill
-that gap.
+`--json` works on `detect`, `doctor`, `adapters`, `session`, `pair`, `run` and
+`dock`, so other agents can consume the output.
+
+## End-to-end acceptance
+
+```bash
+npm run e2e:relay     # scratch git repo, mock Brain × a REAL harness, real CLI
+```
+
+Not part of `npm test`: it spends real provider quota and needs a signed-in
+harness, so a failure here is a fact about the machine rather than a broken
+build — and the script reports which, check by check, with an explicit
+`not applicable` state instead of a pass for a claim it could not evaluate.
+
+As of the last run on this machine, that check is **blocked by Codex's own
+quota** (`unexpected status 403 Forbidden`) — see
+[Known gaps](#known-gaps). The script still established, on real disk through
+the real CLI: discovery, two dispatches, three Brain turns, evidence collected
+from the repository, a run record written, and a `blocked` status quoting the
+harness's own 403 rather than a fabricated success.
 
 ## Driving a browser you already have open
 
@@ -214,24 +355,21 @@ Chromium that bound a random port and announced it only through its profile file
 and against the official ChatGPT desktop build, where the attach, a DOM read of
 its real interface and the detach were all confirmed.
 
-## Commands
+## Harness-owned context
 
-```text
-agent2llm setup                      Connect a Brain (official UI, human login)
-agent2llm run                        Start a collaboration
-agent2llm detect                     Detect installed agents
-agent2llm doctor                     Health checks with repairs
-agent2llm adapters | brains | harnesses
-agent2llm session list|show|resume|stop
-agent2llm workspace list|add|remove
-agent2llm pair | unpair
-agent2llm logs
-agent2llm config
-agent2llm version
-```
+Relay asks the Harness where it is working instead of asking you. That is
+implemented per adapter, and where it is not implemented the adapter says so
+rather than guessing:
 
-`--json` works on `detect`, `doctor`, `adapters`, `session` and the rest, so other
-agents can consume the output.
+| Adapter | `getActiveContext()` | Where the answer comes from |
+| --- | --- | --- |
+| `codex` | yes | the newest rollout under `$CODEX_HOME/sessions`, whose `session_meta` records the `cwd` of the last session |
+| `workbuddy` | reports `null` | the on-disk layout is slugged, so a reverse mapping would be a guess. It declines instead of inventing one |
+| others | not implemented | `undefined`, which is distinct from "there is none" |
+
+Codex-managed roots (`~/.codex/.chatgpt-projects`, `~/Documents/Codex`) are
+skipped, a root that no longer exists is refused, and a session older than 30
+days is not treated as "where you are working now".
 
 ## Adapter status
 
@@ -248,7 +386,7 @@ actually observed.
 | `api` | brain | implemented | not run — needs a key |
 | `workbuddy` | harness | detected (`codebuddy` 2.137.1) | not run |
 | `dsh` | harness | detected (`dsh` 0.1.2-rc.1) | not run |
-| `codex` | harness | implemented | not installed here |
+| `codex` | harness | implemented | attempted — blocked by the machine, see below |
 | `cursor` | harness | implemented | not installed here |
 | `claude-code` | harness | implemented | not installed here |
 | `opencode` | harness | implemented | not installed here |
@@ -263,15 +401,24 @@ see [`docs/adapters/api.md`](docs/adapters/api.md).
 
 Listed because they are real, not because they are interesting.
 
-- Only the `mock-brain` × `mock-harness` pair has been run end to end. Everything
-  else is contract-tested and dry-run checked.
-- Nothing has been verified against a live ChatGPT or Claude account from this
-  machine. The browser transport is verified up to a page loading; login, MCP
-  pairing and a full turn are not.
+- **No Relay run has completed against a real harness yet.** `npm run e2e:relay`
+  reaches real Codex, dispatches, and reads evidence back out of git — but both
+  dispatches come back `unexpected status 403 Forbidden`, which is Codex's own
+  account quota on the machine this was built on. Relay is therefore
+  *contract-tested and end-to-end-exercised*, not *observed working against a
+  real agent*, and the README is not going to imply otherwise.
+- **No real Brain has been run end to end.** Every Relay acceptance run uses the
+  mock Brain, because scripting a Brain is the only way to assert what it was
+  sent. A live ChatGPT or Claude account has not driven this from here.
+- Both of the above are waiting on the same thing: a machine where the harness
+  can actually execute and a Brain is signed in.
 - The desktop build can be attached to and read, but not driven: it serves its
   own interface from `app://` rather than loading `chatgpt.com`, so the website
   selectors do not describe it. `chatgpt-web` refuses such a session explicitly
   rather than waiting for a composer that will never appear.
+- The dock starts runs but cannot answer a Harness's interactive approval
+  request — a prompt needs a person, and a request handler must not block. The
+  request is recorded and shown, and the step has to be run from a terminal.
 - Web Brains scrape a UI, so selectors break when the site changes. The selectors
   are in one file per Brain, on purpose.
 - `chatgpt.com` must be reachable. Cloudflare answers a headless Chromium with
@@ -291,6 +438,13 @@ Listed because they are real, not because they are interesting.
 - **Sensitive files are denied.** `.env`, keys, SSH and cloud credentials, token
   files, auth databases, browser profiles. `.env.example` stays readable.
 - **Opaque workspace ids.** The Brain sees `a2lw_…`, never a filesystem path.
+- **No credentials in pair or run records.** Every write is walked and refused
+  if a value looks like a token, key or cookie. Pairs store opaque adapter refs
+  only.
+- **The dock is loopback-only.** No `--host` exists. One-time token on every
+  route, JSON-only bodies, no CORS headers, no cookies, and a cross-origin
+  `POST` is refused. It holds no window handle, so it cannot affect another
+  application's window.
 - **OAuth 2.1 + PKCE S256 + DCR**, rotating refresh tokens, hashed at rest,
   one-time pairing codes with TTL and rate limits.
 - **Redacted logs.** Tokens, pairing codes, keys, cookies, auth headers.
@@ -315,6 +469,8 @@ export class MyHarness extends HarnessAdapterBase {
 
 Publish it as `@agent2llm/harness-my-harness` with an `apiVersion` in the
 manifest, and it composes with every Brain above without a change to Core.
+To participate in Relay, a CLI harness extends `CliHarnessAdapter` and may
+implement `getActiveContext()`; everything else is inherited.
 
 ## Upstream attribution
 
@@ -333,15 +489,19 @@ migration.
 ```bash
 npm run build       # tsc -b
 npm run typecheck
-npm test            # protocol, contract, security, orchestrator, transports
+npm test            # protocol, contract, security, orchestrator, transports, relay, dock
 npm run lint
 npm run verify
+npm run e2e:relay   # spends real quota; not part of `npm test`
 ```
 
 Tests are plain Node scripts — there is no test framework to install. Each file
 runs in its own process against an isolated `AGENT2LLM_STATE_DIR`. The transport
 suite starts a real Chromium where one is available and reports itself as skipped
 where it is not, so the same command means the same thing on every machine.
+
+Modules have a 400-line budget, enforced by `npm run lint`. When a fix pushes a
+file over it, the split is part of the change rather than a follow-up.
 
 ### Browser engine (optional)
 
@@ -376,6 +536,8 @@ That push needs a token with both `repo` and `workflow` scopes.
 
 ## Docs
 
+- [Relay Mode](docs/workflows/relay.md) · [Brain / Hands](docs/workflows/brain-hands.md) ·
+  [Peer](docs/workflows/peer.md) · [Workflows overview](docs/workflows/README.md)
 - [Architecture](docs/architecture/overview.md) ·
   [Adapters](docs/architecture/adapters.md) ·
   [Browser transport](docs/architecture/browser-transport.md) ·
@@ -384,9 +546,9 @@ That push needs a token with both `repo` and `workflow` scopes.
   [State machine](docs/protocol/state-machine.md)
 - [Threat model](docs/security/threat-model.md) ·
   [Workspace isolation](docs/security/workspace-isolation.md)
-- [Workflows](docs/workflows/README.md) · [Troubleshooting](docs/troubleshooting.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [ADRs](docs/adr/) · [Prior art: C2C](docs/prior-art/C2C.md)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](./LICENSE).

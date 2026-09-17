@@ -1,5 +1,21 @@
 # Workflow presets
 
+Two families. **Relay** is conversation-centric: one Brain thread across many
+runs, and the Harness is sent one step at a time. The presets below are the
+older, plan-centric family, where each run produces a plan the Brain reviews.
+They all still work, unchanged.
+
+## `relay`
+
+One Brain conversation, many goals. The Harness receives a next action and its
+acceptance criteria, never the run's goal. See `relay.md`.
+
+```text
+GOAL ──► BRAIN (next step) ──► HARNESS (execute one) ──► EVIDENCE ──► BRAIN …
+                     ▲                                                  │
+                     └──── the conversation survives between runs ◄──────┘
+```
+
 ## `brain-hands` (default)
 
 Brain plans and reviews; Harness executes. See `brain-hands.md`.

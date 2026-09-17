@@ -7,12 +7,24 @@
 
 [English](./README.md) · 简体中文
 
-用 ChatGPT 或 Claude 当大脑，驱动 DeepSeek Harness、WorkBuddy、Codex、Cursor、
-Claude Code、OpenCode 干活。
+**你最好的模型负责思考。你最顺手的 agent 负责干活。**
+
+用 ChatGPT 或 Claude 当大脑，驱动 Codex、Cursor、Claude Code、WorkBuddy、
+DeepSeek Harness 或 OpenCode —— 并且**让同一段对话跨越许多次小步执行**，
+不必每回都重新交代一遍项目背景。
 
 ```text
 N 个 Brain 适配器  ×  M 个 Harness 适配器  =  N × M 种组合
 ```
+
+目前有两套工作流，承诺不同，请按需选择。
+
+| | **Relay（接力）** | **Brain / Hands（大脑 / 双手）** |
+| --- | --- | --- |
+| 对话归谁 | **Brain**，跨多次运行保留 | 单次运行的一份计划 |
+| 发给 Harness 的 | 下一步动作 + 验收标准 | 一个目标，由它自行推导计划 |
+| Brain 审什么 | 从你仓库里读出来的证据 | 工作区的只读视图 |
+| 什么时候用 | 想要一个长期协作的伙伴 | 想要一份可复审的计划产物 |
 
 ## 为什么做这个
 
@@ -28,6 +40,72 @@ Agent2LLM 留下思路，去掉焊接。Brain 和 Harness 分列适配器边界�
   `mock-harness`
 
 新增一边不影响另一边。整个设计就这一句话。
+
+## Relay 模式
+
+一段对话，多个目标。Brain 拿着主线，Harness 一次只做一步。
+
+```bash
+agent2llm pair create --brain chatgpt-web --harness codex   # 只需一次
+agent2llm run "加一个 slugify() 工具函数和测试"              # 第 1 次
+agent2llm run "现在让它支持 Unicode"                        # 第 2 次，同一段对话
+```
+
+第 2 次运行面对的是**第 1 次运行时那段同一个 Brain 对话**。这就是全部要点：长期规划
+沉淀在对话里，而不是每次都从头重建。
+
+### Harness 实际收到的内容
+
+Relay 的派发是「只执行」。Harness 只会被告知做什么、这一步按什么标准验收 ——
+永远不会被告知这次运行**为了什么**：
+
+```text
+EXECUTION-ONLY MODE
+NEXT ACTION
+  在 src/slugify.js 中导出 slugify(text)。
+ACCEPTANCE
+  - src/slugify.js 存在
+  - 'Hello World' 变成 'hello-world'
+```
+
+运行目标被刻意省略。把目标交给 Harness，等于邀请它把 Brain 已经做过的规划再推导
+一遍，并顺手写一份没人要的报告。简报里没有目标，就没有可重新规划的东西。
+
+### 状态是记录，不是表态
+
+Brain 说 `DONE`，那是一个主张。每次派发之后，Agent2LLM 自己去读你的仓库，
+不会仅凭 Brain 一句话就宣称成功：
+
+| 观察到的事实 | 运行状态 |
+| --- | --- |
+| Harness 声称改了文件，git 显示工作区干净 | `blocked` —— 仓库反驳了它 |
+| 每一次派发都失败 | `blocked`，并原样引用 Harness 自己的报错 |
+| 什么都没动、也没声称改动，Brain 说 done | `done` —— 没有可权衡的执行 |
+
+第三行不是漏洞：一个不要求任何执行就说 `DONE` 的 Brain，是在说活早干完了，
+而指标里会同时显示 `0 execution(s)`。
+
+### 配对坞
+
+```bash
+agent2llm dock
+```
+
+在 `127.0.0.1` 上开一个页面，列出你的 pair，每个配一个目标输入框。它是网页而不是
+桌面窗口，这是有意的：它**不持有任何窗口句柄**，因此不可能移动、缩放或重新挂载
+（reparent）你旁边开着的那个 coding agent。只监听回环地址、一次性 token、
+只接受 JSON、不使用 cookie。详见 [`docs/workflows/relay.md`](docs/workflows/relay.md)。
+
+## Brain / Hands（原有工作流，未改动）
+
+Brain 产出计划、复审原始证据；Harness 写执行报告。
+
+```bash
+agent2llm run   --brain chatgpt-web --harness dsh   --workflow brain-hands --workspace .   --goal "实现暗色模式"
+```
+
+`--brain` + `--harness` 且不带 `--relay`，含义仍然是这一套。Relay 两个方向都要显式开启，
+所以没有任何既有命令改变含义。
 
 ## 它是怎么跑的
 
@@ -96,22 +174,39 @@ agent2llm run \
   --goal "实现暗色模式"
 ```
 
+Relay，从建 pair 到跑起来：
+
+```bash
+agent2llm pair create --brain chatgpt-web --harness codex   # 不需要 --workspace
+agent2llm pair list
+agent2llm run "加一个 slugify() 工具函数和测试"
+agent2llm pair show                                         # 对话指针存在这里
+```
+
+上下文归 Harness 管。如果 Codex 正开着 `D:\my-game`，pair 就绑在那儿，不会再问你目录。
+`--workspace` 可以覆盖它；当两者不一致时，CLI 会把被忽略的那个目录说出来，而不是
+默默替你选一个。
+
 不碰任何产品，只验证配对是否成立：
 
 ```bash
 agent2llm run --brain chatgpt-web --harness workbuddy --dry-run
 ```
 
-思考到底花了多少钱：
+## 测出来的，不是声称的
 
-```bash
-agent2llm report
-```
+`agent2llm report` 和每次运行都会打印真实观察到的东西。三个单位，永不混用：
 
-Brain 是协作里唯一按 token 花钱的一侧，而且只在 inspect / plan / review 时思考。
-report 打印 provider 实际计费的数字，按会话和阶段列出——而每次运行的 harness 一侧
-是 **0 个 brain token**，这是结构保证的：执行阶段从不咨询任何模型。Web 版按订阅计费、
-不报数，所以也不替它编一个估计值。
+- **provider token** —— API Brain 的后台实际计费量。只有 `api` 这个大脑报得出来。
+  Web 版按订阅计费，什么都报不了，那就记成 `unavailable` 并附上原因，
+  绝不替它估一个看起来像测量值的数字。
+- **估算文本 token** —— 字节数除以四，并明确标注是估算。用来比较两段 prompt 可以，
+  当账单数字不行。
+- **执行次数** —— Harness 一侧的 `0 brain token` 是结构性事实而非测量：执行从不咨询模型。
+
+关于证据体积：唯一一次对着真实 Codex 跑通的端到端运行采集了 1340 字节证据，
+发给 Brain 的是其中 500 字节。这是一次运行的测量，就按一次运行来引用——
+不是节省比例，也不是预测。
 
 ## 让它驱动一个你已经开着的窗口
 
@@ -198,20 +293,25 @@ agent2llm run --brain chatgpt-web --harness workbuddy \
 ## 命令
 
 ```text
+agent2llm pair create|list|show|remove
+agent2llm run "目标"                 Relay 模式——以对话为中心的那条路
+agent2llm dock                       本机页面，列出你的所有 pair
 agent2llm setup                      连接 Brain（官方 UI，人工登录）
-agent2llm run                        开始一次协作
+agent2llm run --brain B --harness H  Brain / Hands——原有工作流
 agent2llm detect                     探测本机装了哪些 agent
 agent2llm doctor                     体检 + 修复建议
 agent2llm adapters | brains | harnesses
 agent2llm session list|show|resume|stop
 agent2llm workspace list|add|remove
-agent2llm pair | unpair
+agent2llm pair <工作区> | unpair      与 bridge 的设备配对——是另一个「pair」
 agent2llm logs
+agent2llm report
 agent2llm config
 agent2llm version
 ```
 
-`detect`、`doctor`、`adapters`、`session` 等命令都支持 `--json`，方便别的 agent 消费。
+`detect`、`doctor`、`adapters`、`session`、`pair`、`run`、`dock` 等命令都支持
+`--json`，方便别的 agent 消费。
 
 ## 适配器状态
 
@@ -226,7 +326,7 @@ agent2llm version
 | `api` | brain | implemented | 未跑——需要密钥 |
 | `workbuddy` | harness | detected（`codebuddy` 2.137.1） | 未跑 |
 | `dsh` | harness | detected（`dsh` 0.1.2-rc.1） | 未跑 |
-| `codex` | harness | implemented | 本机未安装 |
+| `codex` | harness | implemented | 试过——被本机配额挡住，见下 |
 | `cursor` | harness | implemented | 本机未安装 |
 | `claude-code` | harness | implemented | 本机未安装 |
 | `opencode` | harness | implemented | 本机未安装 |
@@ -240,9 +340,17 @@ provider 的 tool calling 去调。没有数据平面时它直接声明自己没
 
 列在这儿是因为它们是真的，不是因为它们好看。
 
-- 只有 `mock-brain` × `mock-harness` 这一对跑通过端到端。其余是契约测试 + dry-run。
-- 没有对真实的 ChatGPT / Claude 账号验证过任何东西。浏览器链路只验证到"页面加载成功"
-  这一步，登录、MCP 配对、完整一轮对话都没验证。
+- **Relay 还没有对真实 harness 跑通过任何一次。** `npm run e2e:relay` 确实够到了真实的
+  Codex，也确实发起了派发、把证据从 git 里读了回来——但两次派发都返回
+  `unexpected status 403 Forbidden`，那是构建这台机器上 Codex 账号自己的配额。
+  所以 Relay 目前的准确说法是「契约测试通过 + 端到端链路被走过」，**不是**
+  「观测到对真实 agent 可用」，README 也不会往那个方向暗示。
+- **没有真实 Brain 跑通过端到端。** 所有 Relay 验收运行用的都是 mock Brain，
+  因为只有脚本化的 Brain 才能断言"到底发给它了什么"。从这台机器出发，
+  没有用真实的 ChatGPT / Claude 账号驱动过。
+- 上面两条在等同一件事：一台 harness 真能执行、并且 Brain 已登录的机器。
+- `dock` 能发起运行，但答不了 Harness 的交互式审批请求——那需要一个人，
+  而请求处理函数不能阻塞。请求会被记录下来并显示出来，那一步得回终端跑。
 - 桌面版能接管、能读，但驱动不了：它从 `app://` 走自己的界面，不加载 `chatgpt.com`，
   所以站方选择器描述不到它。`chatgpt-web` 撞上这种会话会直接报错，而不是干等一个永远
   不会出现的输入框。
@@ -263,6 +371,11 @@ provider 的 tool calling 去调。没有数据平面时它直接声明自己没
 - **敏感文件拒绝访问。** `.env`、密钥、SSH 与云凭据、token 文件、认证数据库、浏览器
   profile。`.env.example` 保持可读。
 - **工作区 id 不透明。** Brain 看到的是 `a2lw_…`，永远不是文件系统路径。
+- **pair / run 记录里不放凭据。** 每次写入都会被逐个字段检查，只要值长得像 token、
+  密钥或 cookie 就直接拒绝。pair 里存的是适配器自己拥有的不透明 ref。
+- **dock 只监听回环地址。** 没有 `--host` 这个东西。每条路由都要一次性 token，
+  只接受 JSON，不返回 CORS 头，不使用 cookie，跨源 `POST` 一律拒绝。
+  它不持有任何窗口句柄，所以影响不到别的应用的窗口。
 - **OAuth 2.1 + PKCE S256 + DCR**，刷新令牌轮转，静态哈希存储，一次性配对码带 TTL
   和限流。
 - **日志脱敏。** token、配对码、密钥、cookie、认证头。
@@ -304,13 +417,17 @@ Agent2LLM 改编了
 ```bash
 npm run build       # tsc -b
 npm run typecheck
-npm test            # 协议、契约、安全、编排、transport
+npm test            # 协议、契约、安全、编排、transport、relay、dock
 npm run lint
 npm run verify
+npm run e2e:relay   # 会消耗真实配额；不属于 npm test
 ```
 
 测试就是普通 Node 脚本，不需要装测试框架。每个文件独立进程跑，用隔离的
 `AGENT2LLM_STATE_DIR`。
+
+单个模块有 400 行上限，由 `npm run lint` 强制。当某个修复把文件顶过上限时，
+拆分是这个改动的一部分，而不是后续任务。
 
 ### 浏览器引擎（可选）
 
@@ -350,7 +467,9 @@ git commit -m "ci: enable GitHub Actions workflow"
   [状态机](docs/protocol/state-machine.md)
 - [威胁模型](docs/security/threat-model.md) ·
   [工作区隔离](docs/security/workspace-isolation.md)
-- [工作流](docs/workflows/README.md) · [故障排查](docs/troubleshooting.md)
+- [Relay 模式](docs/workflows/relay.md) · [Brain / Hands](docs/workflows/brain-hands.md) ·
+  [Peer](docs/workflows/peer.md) · [工作流总览](docs/workflows/README.md)
+- [故障排查](docs/troubleshooting.md)
 - [ADR](docs/adr/) · [前作：C2C](docs/prior-art/C2C.md)
 
 ## 许可
