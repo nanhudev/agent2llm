@@ -1,19 +1,16 @@
 # GitHub Actions workflow for Agent2LLM.
 #
-# This file intentionally lives OUTSIDE `.github/workflows/`.
+# Runs on every push to main and every pull request against it.
 #
-# GitHub treats `.github/workflows/**` as a protected path: any push that creates
-# or updates a file there is rejected unless the credential carries the
-# `workflow` scope (a plain `repo`-scoped PAT is refused with
-# "refusing to allow a Personal Access Token to create or update workflow").
-# Keeping it here means the repository can be pushed with `repo` alone.
+# Mock-only by design: this suite contacts no real provider. Real-provider E2E
+# needs accounts and quota, so it stays in `npm run e2e:relay`, which is run by
+# a person on a machine that has them — and which reports a failure as a fact
+# about that machine rather than as a broken build.
 #
-# To enable CI, move it into the workflow directory:
-#
-#   mkdir -p .github/workflows
-#   mv .github/ci/github-actions.yml .github/workflows/ci.yml
-#
-# Nothing else needs to change. Matrix: Linux / Windows / macOS x Node 20 / 22.
+# This file used to sit outside `.github/workflows/` on purpose: a push that
+# creates or updates a workflow file is refused unless the credential carries
+# the `workflow` scope, and the repository was being pushed with `repo` alone.
+# It moved in once a credential with that scope was available.
 name: CI
 
 on:
