@@ -41,6 +41,9 @@
       "path": "packages/pairs"
     },
     {
+      "path": "packages/evidence"
+    },
+    {
       "path": "packages/mcp"
     },
     {
