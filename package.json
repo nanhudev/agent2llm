@@ -24,7 +24,8 @@
     "verify": "npm run typecheck && npm run test",
     "bundle": "node scripts/bundle.mjs",
     "pack": "node scripts/bundle.mjs && node scripts/pack.mjs",
-    "a2l": "node apps/cli/dist/index.js"
+    "a2l": "node apps/cli/dist/index.js",
+    "e2e:relay": "node scripts/e2e-relay.mjs"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
