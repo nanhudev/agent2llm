@@ -6,6 +6,37 @@ All notable changes are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The dock teaches the model it runs on, and can now do the whole job.**
+  The dock page (PHASE 7–11 work, five changes):
+  - The page opens by stating the mental model — one Pair is one Brain × one
+    Harness, the Brain holding the conversation across goals, the Harness the
+    hands working in a folder — where the pairs render under it.
+  - **A first Pair can be made on the page.** `POST /api/pairs` sits behind
+    the same gates as a run (one-time token, compared `Origin`, JSON-only
+    body) and calls `createPairCore`, the function `a2l pair create` was
+    refactored to share, so a pair made on the page and one made in a
+    terminal are indistinguishable on disk. `GET /api/catalog` offers the
+    registry's own adapters with their roles, so the form can only offer
+    what exists.
+  - **A run in flight is no longer mute.** The page polls `/api/state` —
+    which the server already maintains — and shows seconds elapsed, the
+    tail of the orchestration's operational lines, and any approval the
+    harness asked for. Operational sentences only, never the Brain's
+    reasoning.
+  - **Run failures answer what, where and next**, with the server supplying
+    the next step where one genuinely exists (409 → wait; 404 → create the
+    pair; no context → open the harness on a folder or create the pair with
+    a workspace) and the raw message kept in a collapsed details block. A
+    run blocked on approvals lists them and says plainly that the page
+    cannot answer them.
+  - **The result panel reports metrics with strict accounting semantics:**
+    the Brain's spend is provider-reported (with its parts), unavailable
+    (with its reason), or not measured — never a fabricated 0; the test
+    count is a number or an honest null; measured text sizes are labelled
+    as estimates; and there is no cost figure anywhere.
+
 ### Changed
 
 - **`a2l` is the command the product prints.** Help text, first-run hints and
