@@ -8,26 +8,24 @@
  * The command is deliberately thin. Everything it decides is either told to it
  * or read from the harness — there is no place here that picks a folder on the
  * user's behalf, because a run that edits the wrong repository looks exactly
- * like one that worked.
+ * like one that worked. The parts worth reading twice live in `pair-select.ts`.
  *
  * Note: `a2l pair <workspace>` is *device* pairing (PKCE between this machine
  * and the bridge) and is handled in `setup.ts`. This module answers to the
  * subcommands — `create`, `list`, `show`, `remove` — and to no arguments at
  * all, which lists. The two meanings are kept apart in `index.ts`.
  */
-import { newId } from "@agent2llm/core";
 import type { AdapterRegistry } from "@agent2llm/adapter-sdk";
+import { CONTEXT_MODES } from "@agent2llm/pairs";
 import {
-  CONTEXT_MODES,
-  PairStore,
-  RunStore,
-  createPair,
-  pairIdentity,
-  resolveContext,
-  type ContextMode,
-  type HarnessContext,
-  type Pair,
-} from "@agent2llm/pairs";
+  ensurePair,
+  findPairByIdentity,
+  parseMode,
+  pairsStore,
+  resolvePairContext,
+  roleOf,
+  runsStore,
+} from "./pair-select.js";
 import * as ui from "../ui.js";
 
 export interface PairOptions {
@@ -38,133 +36,6 @@ export interface PairOptions {
   contextMode?: string;
   json?: boolean;
   verbose?: boolean;
-}
-
-export function pairsStore(): PairStore {
-  return new PairStore();
-}
-
-export function runsStore(): RunStore {
-  return new RunStore();
-}
-
-export function newPairId(): string {
-  return newId("a2lp", 5);
-}
-
-/** `null` when the user typed something that is not a context mode. */
-function parseMode(value: string | undefined): ContextMode | null {
-  if (value === undefined) return "harness-owned";
-  return (CONTEXT_MODES as readonly string[]).includes(value) ? (value as ContextMode) : null;
-}
-
-/**
- * Where this pair should work.
- *
- * The order is the product decision. A Harness that can say which project it
- * has open is believed first; a `--workspace` the user typed next; the pair's
- * remembered context last, so a pair created once keeps working without being
- * re-told where it lives.
- *
- * `note` is always populated, so "we could not tell" reaches the user as a
- * sentence with a way out rather than as an absence.
- */
-export async function resolvePairContext(
-  registry: AdapterRegistry,
-  options: {
-    harnessId: string;
-    workspace?: string | undefined;
-    remembered?: HarnessContext | null;
-    mode?: ContextMode;
-  }
-): Promise<{ context: HarnessContext | null; note: string }> {
-  const mode = options.mode ?? "harness-owned";
-  let reported: { root?: string } | null = null;
-  let askNote = "";
-
-  if (mode !== "none") {
-    try {
-      const harness = registry.getHarness(options.harnessId);
-      reported = (await harness.getActiveContext?.()) ?? null;
-    } catch (error) {
-      // An adapter that throws here has not answered the question, which is
-      // different from answering "nowhere" — and both are different from a
-      // guess, so the exception is recorded rather than swallowed.
-      askNote = `The harness could not report its context: ${(error as Error).message}. `;
-    }
-  }
-
-  const resolved = resolveContext({
-    reported,
-    ...(options.workspace ? { userRoot: options.workspace } : {}),
-    ...(options.remembered?.root ? { fallbackRoot: options.remembered.root } : {}),
-    mode,
-  });
-
-  // `resolveContext` does not know where a root came from beyond "an A2L
-  // record". When that record is this pair's own memory, say so — "reusing what
-  // this pair already knew" is a different sentence from "reading a workspace
-  // list", and only one of them tells the user why nothing was asked.
-  const fromMemory =
-    !options.workspace &&
-    !reported?.root &&
-    resolved.context?.source === "a2l" &&
-    resolved.context.root === options.remembered?.root;
-
-  const note = fromMemory
-    ? `${askNote}Reusing this pair's stored context: ${resolved.context?.root}`
-    : `${askNote}${resolved.note}`;
-  return { context: resolved.context, note };
-}
-
-/**
- * The pair a bare `a2l run` should use, found by identity rather than by id.
- *
- * A `--brain`/`--harness` invocation that happens to match an existing pair is
- * a *continuation* of it, not a new one. Creating a second pair with the same
- * two adapters and the same context would silently start a new conversation,
- * which is precisely the thing Relay exists to avoid.
- */
-export function findPairByIdentity(
-  pairs: PairStore,
-  input: { brainAdapterId: string; harnessAdapterId: string; context: HarnessContext | null }
-): Pair | null {
-  const wanted = pairIdentity(input);
-  return pairs.list().find((pair) => pairIdentity(pair) === wanted) ?? null;
-}
-
-/** Find-or-create, so `--relay --brain X --harness Y` does not fork a thread. */
-export function ensurePair(
-  pairs: PairStore,
-  input: {
-    brainAdapterId: string;
-    harnessAdapterId: string;
-    context: HarnessContext | null;
-    contextMode?: ContextMode;
-    label?: string;
-  }
-): Pair {
-  const existing = findPairByIdentity(pairs, input);
-  if (existing) return existing;
-  const created = createPair({
-    pairId: newPairId(),
-    brainAdapterId: input.brainAdapterId,
-    harnessAdapterId: input.harnessAdapterId,
-    ...(input.contextMode ? { contextMode: input.contextMode } : {}),
-    ...(input.label ? { label: input.label } : {}),
-  });
-  // One write, with the context already on it: a pair that exists without the
-  // context it was created for is a pair the next run has to re-ask about.
-  return pairs.save(input.context ? { ...created, context: input.context } : created);
-}
-
-type Role = "brain" | "harness";
-
-/** Which side of the registry an id lives on, or `null` if it is not there. */
-function roleOf(registry: AdapterRegistry, id: string): Role | null {
-  if (registry.listBrains().some((adapter) => adapter.metadata().id === id)) return "brain";
-  if (registry.listHarnesses().some((adapter) => adapter.metadata().id === id)) return "harness";
-  return null;
 }
 
 // ---- commands ----------------------------------------------------------------
@@ -211,9 +82,9 @@ export async function runPairCreate(registry: AdapterRegistry, options: PairOpti
     ui.fail("A pair needs both sides: --brain <id> and --harness <id>.");
     return 2;
   }
-  const wanted: Array<{ flag: string; id: string; role: Role }> = [
-    { flag: "--brain", id: options.brain, role: "brain" },
-    { flag: "--harness", id: options.harness, role: "harness" },
+  const wanted = [
+    { flag: "--brain", id: options.brain, role: "brain" as const },
+    { flag: "--harness", id: options.harness, role: "harness" as const },
   ];
   for (const side of wanted) {
     const actual = roleOf(registry, side.id);
@@ -247,12 +118,20 @@ export async function runPairCreate(registry: AdapterRegistry, options: PairOpti
     context,
   });
   if (existing) {
+    // The probe failing is worth reporting, but it must not read as "this pair
+    // lost its folder": the stored context is still what a run falls back to.
+    const noteText =
+      !context && existing.context?.root
+        ? `Kept this pair's stored context: ${existing.context.root}. ${note}`
+        : note;
     if (options.json) {
-      ui.jsonOutput({ pair: existing, created: false, contextNote: note });
+      ui.jsonOutput({ pair: existing, created: false, contextNote: noteText });
       return 0;
     }
-    ui.line(`  ${ui.cyan("Reusing")} pair ${existing.pairId} — this brain and harness already share a conversation here.`);
-    ui.line(ui.dim(`  ${note}`));
+    ui.line(
+      `  ${ui.cyan("Reusing")} pair ${existing.pairId} — this brain and harness already share a conversation here.`
+    );
+    ui.line(ui.dim(`  ${noteText}`));
     return 0;
   }
 
@@ -277,42 +156,11 @@ export async function runPairCreate(registry: AdapterRegistry, options: PairOpti
   return 0;
 }
 
-/** Picks a pair from whatever the user named: an id, adapters, or nothing. */
-export function selectPair(
-  pairs: PairStore,
-  options: { pairId?: string | undefined; brain?: string | undefined; harness?: string | undefined }
-): { pair: Pair | null; error?: string } {
-  if (options.pairId) {
-    const pair = pairs.get(options.pairId);
-    return pair ? { pair } : { pair: null, error: `No pair with id '${options.pairId}'. See 'a2l pair list'.` };
-  }
-  if (options.brain && options.harness) {
-    const matches = pairs
-      .list()
-      .filter((pair) => pair.brainAdapterId === options.brain && pair.harnessAdapterId === options.harness);
-    if (matches.length === 0) {
-      return { pair: null, error: `No pair joins ${options.brain} with ${options.harness} yet.` };
-    }
-    // More than one means the same two adapters in different folders. The most
-    // recently used one is the one the user was last looking at.
-    const sorted = [...matches].sort((a, b) => (b.lastRunAt ?? b.updatedAt).localeCompare(a.lastRunAt ?? a.updatedAt));
-    return { pair: sorted[0]! };
-  }
-  const active = pairs.active();
-  if (!active) {
-    return {
-      pair: null,
-      error: "No pairs yet. Create one with 'a2l pair create --brain <id> --harness <id>'.",
-    };
-  }
-  return { pair: active };
-}
-
 export async function runPairShow(pairId: string | undefined, options: { json?: boolean } = {}): Promise<number> {
   const pairs = pairsStore();
-  const { pair, error } = selectPair(pairs, { pairId });
+  const pair = pairId ? pairs.get(pairId) : pairs.active();
   if (!pair) {
-    ui.fail(error ?? "No such pair.");
+    ui.fail(pairId ? `No pair with id '${pairId}'. See 'a2l pair list'.` : "No pairs yet.");
     return 1;
   }
   const runs = runsStore().byPair(pair.pairId);

@@ -87,6 +87,28 @@ export class WorkBuddyHarnessAdapter extends CliHarnessAdapter {
     return result;
   }
 
+  /**
+   * WorkBuddy's open project is not readable, and this says so instead of
+   * guessing.
+   *
+   * Measured on WorkBuddy 2.137.1: the only record of "which project" is
+   * `~/.workbuddy/projects/<slug>/`, where `<slug>` is the absolute path with
+   * every separator replaced by `-`. That is lossy in both directions —
+   * `C:\a\my-project` and `C:\a\my\project` produce the same name — so the path
+   * cannot be recovered without inventing one. The sibling `*.meta.json` files
+   * sit behind the app's own file protection (reading one is denied on this
+   * machine), so their shape could not be verified, and an unverified parser
+   * that emits a *workspace root* is the most expensive kind of guess: a run
+   * pointed at the wrong folder looks exactly like one that worked.
+   *
+   * Returning `null` is the documented way to say "this product does not
+   * advertise a context". `agent2llm run` then asks for a folder, or takes
+   * `--workspace`, which is a smaller cost than a confident wrong answer.
+   */
+  async getActiveContext(): Promise<null> {
+    return null;
+  }
+
   async buildCapabilities(): Promise<CapabilityManifest> {
     const caps = withCapabilities(this.emptyManifestFor("subprocess"), [
       "session.create",
@@ -110,6 +132,7 @@ export class WorkBuddyHarnessAdapter extends CliHarnessAdapter {
         "Requires a WorkBuddy account/session on the machine; Agent2LLM does not manage WorkBuddy credentials.",
         ...(this.hasFlag("--resume") ? [] : ["This build did not advertise --resume; sessions will not continue across rounds."]),
         "Agent2LLM never bypasses permissions by default: --dangerously-skip-permissions is not used.",
+        "Does not report an open project: Agent2LLM asks for the folder, or takes --workspace.",
       ],
       // Finding the binary is evidence the product is installed; it is not
       // evidence the user is signed in, and Agent2LLM deliberately does not

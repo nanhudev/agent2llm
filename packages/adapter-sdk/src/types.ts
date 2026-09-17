@@ -251,6 +251,17 @@ export interface HarnessContextReport {
   /** 0..1, only when the adapter can genuinely estimate it. */
   confidence?: number;
   detail?: Record<string, string | number | boolean>;
+  /**
+   * A sentence for the user, in the adapter's own words.
+   *
+   * Carries the reason a report has no `root` — the newest Codex session ran
+   * inside Codex's own workspace, the folder is gone — and the basis for one
+   * that has. Reported as a note rather than as a log line because the adapter
+   * is the only party that knows, and "we looked and here is why the answer is
+   * nothing" is what lets a user act. It is never the source of a context: a
+   * report with a note and no root is still no context.
+   */
+  note?: string;
 }
 
 

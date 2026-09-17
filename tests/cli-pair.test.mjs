@@ -95,6 +95,22 @@ test("cli-pair", "creating the same pair twice reuses it instead of forking a co
   assert(body.pair.pairId.length > 0, "the reused pair is reported in full");
 });
 
+test("cli-pair", "a probe that fails once does not fork the conversation", () => {
+  // The regression this pins: a null context used to be hashed into the pair
+  // identity as `no-context`, so a harness whose probe failed one time — Codex
+  // before its first rollout, an unreadable state directory — produced a
+  // *second* pair for the same brain and harness. That is a new conversation,
+  // which is the one outcome Relay exists to prevent.
+  const before = a2lJson("pair", "list").body.pairs;
+  assertEqual(before.length, 1, "one pair to begin with");
+  const { result, body } = a2lJson("pair", "create", "--brain", "mock-brain", "--harness", "mock-harness");
+  assertEqual(result.status, 0, "creating without --workspace is allowed");
+  assertEqual(body.created, false, "no workspace plus a silent harness must reuse, not create");
+  assertEqual(body.pair.pairId, before[0].pairId, "the same conversation, not a second one");
+  assertEqual(body.pair.context.root, path.resolve(STATE, "workspace"), "and the stored context survives");
+  assertEqual(a2lJson("pair", "list").body.pairs.length, 1, "the store still holds exactly one pair");
+});
+
 test("cli-pair", "pair list shows the pair and its context", () => {
   const { result, body } = a2lJson("pair", "list");
   assertEqual(result.status, 0, "list succeeds");

@@ -29,7 +29,7 @@ import {
   resolvePairContext,
   runsStore,
   selectPair,
-} from "./pair.js";
+} from "./pair-select.js";
 import * as ui from "../ui.js";
 
 export interface RelayOptions {
@@ -86,8 +86,14 @@ async function resolvePair(
       context,
       contextMode: mode,
     });
-    if (context) notes.push(note);
-    return { pair, context };
+    // `ensurePair` may have handed back a pair that already knew where it
+    // works, which is exactly what a re-used pair is for. A probe that failed
+    // must not turn into "no folder": the stored context is the fallback, and
+    // Relay only refuses when there is none.
+    const stored = pair.context?.root ? pair.context : null;
+    const usable = context ?? stored;
+    notes.push(usable === context ? note : `Kept this pair's stored context: ${stored?.root}. ${note}`);
+    return { pair, context: usable };
   }
 
   const { pair, error } = selectPair(store, {});

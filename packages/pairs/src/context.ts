@@ -18,6 +18,8 @@ export interface ReportedContext {
   displayName?: string;
   confidence?: number;
   detail?: Record<string, string | number | boolean>;
+  /** The adapter's own sentence, including why it could not name a root. */
+  note?: string;
 }
 
 export function contextFromRoot(input: {

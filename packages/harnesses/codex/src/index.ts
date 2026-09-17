@@ -26,9 +26,13 @@ import type {
   DetectionResult,
   DetectContext,
   ExecutionRequest,
+  HarnessContextReport,
   HarnessEvent,
   HarnessSession,
 } from "@agent2llm/adapter-sdk";
+import { readLatestCodexContext } from "./active-context.js";
+
+export * from "./active-context.js";
 
 /**
  * Discovery.
@@ -118,6 +122,35 @@ export class CodexHarnessAdapter extends CliHarnessAdapter {
         resumeSubcommand: this.hasFlag("resume"),
         jsonFlag: this.hasFlag("--json"),
       },
+    };
+  }
+
+  /**
+   * Where Codex last worked, read from its own rollout headers.
+   *
+   * `null` would mean "Codex does not advertise a context", which is false —
+   * it keeps one per session. When the newest sessions are all Codex Desktop's
+   * own scratch trees, or the folder is gone, the answer is a report with no
+   * `root` and a `note` explaining which, so the user is told why they are
+   * being asked to pick a folder. See `active-context.ts`.
+   */
+  async getActiveContext(): Promise<HarnessContextReport | null> {
+    const scan = readLatestCodexContext();
+    if (!scan.root) return { note: scan.note };
+    return {
+      root: scan.root,
+      displayName: path.basename(scan.root),
+      // Not 1.0: a rollout records where a session ran, which is a strong
+      // signal about the user's project and not a declaration about the
+      // window they have open right now.
+      confidence: 0.5,
+      detail: {
+        basis: "latest-session",
+        originator: scan.originator ?? "unknown",
+        at: scan.at ?? "unknown",
+        sessionsScanned: scan.scanned,
+      },
+      note: scan.note,
     };
   }
 
