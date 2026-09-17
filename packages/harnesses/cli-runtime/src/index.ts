@@ -13,6 +13,7 @@ import { locateBinary, readVersion, type BinaryLocation } from "@agent2llm/detec
 import { renderExecutionBrief } from "@agent2llm/execution";
 import { helpMentions, readHelp, runProcess, type RunningProcess, type RunOutcome } from "@agent2llm/transports";
 import { summarizeOutcome } from "./outcome.js";
+import { toSpawnable } from "./spawnable.js";
 import type { CliHarnessProfile } from "./profile.js";
 import type { ExecutionAccumulator } from "./helpers.js";
 import {
@@ -244,9 +245,15 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
     const bin = this.requireBinary();
     const handleId = `${this.profile.id}-${task.taskId}-${task.iteration}-${Date.now()}`;
     const args = this.buildArgs(task, session);
+    // Discovery says where the CLI is; `toSpawnable` decides what the OS can
+    // actually launch. The two disagree on Windows, where an npm-installed CLI
+    // is found as an extensionless POSIX shim that Node refuses to spawn —
+    // detect reads it through its shebang interpreter, so execution must too,
+    // or every npm-distributed harness fails right after `detect` praised it.
+    const invocation = toSpawnable(bin.path, args);
     const proc = runProcess({
-      bin: bin.path,
-      args,
+      bin: invocation.bin,
+      args: invocation.args,
       cwd: task.workspaceRoot,
       timeoutMs: 45 * 60 * 1000,
     });
@@ -277,6 +284,15 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
     };
     let lastText = "";
     /**
+     * The last line the harness printed on stderr.
+     *
+     * Kept because it is often the only readable reason a launch failed —
+     * a CLI that cannot configure its model dies with a precise sentence on
+     * stderr and silence on stdout. Without it the failure summary asserted
+     * "no readable message" about a message that existed.
+     */
+    let lastStderr = "";
+    /**
      * The harness's own failure sentence, when it produced one.
      *
      * A failing CLI often emits a structured error event and *then* keeps
@@ -289,6 +305,7 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
 
     for await (const event of proc.events()) {
       if (event.stream === "stderr") {
+        lastStderr = event.line;
         yield { type: "log", at: new Date().toISOString(), message: event.line.slice(0, 500) };
         continue;
       }
@@ -314,7 +331,7 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
     const outcome = await proc.outcome();
     acc.ok = !outcome.timedOut && outcome.exitCode === 0;
     acc.exitStatus = outcome.timedOut ? "timeout" : String(outcome.exitCode ?? "unknown");
-    acc.summary = this.summarize(outcome, acc, firstFailure, lastText);
+    acc.summary = this.summarize(outcome, acc, firstFailure, lastText, lastStderr);
 
     this.runs.delete(handle.id);
 
@@ -363,9 +380,10 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
     outcome: RunOutcome,
     acc: ExecutionAccumulator,
     firstFailure: string | null,
-    lastText: string
+    lastText: string,
+    lastStderr = ""
   ): string {
-    return summarizeOutcome(this.profile.name, outcome, acc, firstFailure, lastText);
+    return summarizeOutcome(this.profile.name, outcome, acc, firstFailure, lastText, lastStderr);
   }
 }
 // Line helpers and the outcome/brief decisions live in their own modules to keep
@@ -373,5 +391,6 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
 // harness adapter imports them from this package's entry point.
 export { meaningfulLine, parseJsonLine, stripAnsi, type ExecutionAccumulator } from "./helpers.js";
 export { renderTaskFor, summarizeOutcome } from "./outcome.js";
+export { toSpawnable, type SpawnInvocation } from "./spawnable.js";
 export type { CliHarnessProfile } from "./profile.js";
 

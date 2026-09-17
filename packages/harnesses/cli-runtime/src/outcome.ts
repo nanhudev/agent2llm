@@ -26,7 +26,8 @@ export function summarizeOutcome(
   outcome: RunOutcome,
   acc: ExecutionAccumulator,
   firstFailure: string | null,
-  lastText: string
+  lastText: string,
+  lastStderr = ""
 ): string {
   if (outcome.timedOut) {
     return `${productName} timed out after ${Math.round(outcome.durationMs / 1000)}s.`;
@@ -35,7 +36,13 @@ export function summarizeOutcome(
   if (outcome.exitCode === 0) {
     return (lastText || `${productName} finished successfully.`).slice(0, 500);
   }
-  const readable = meaningfulLine(lastText);
+  // A failing CLI often puts the only readable reason on stderr — the case
+  // that motivated this: `dsh --profile headless` died with
+  // `UNKNOWN_MODEL: pi-ai provider … has no configured model …` on stderr
+  // and nothing at all on stdout, yet the summary claimed there was no
+  // readable message. Stdout is still preferred: it is where a harness's own
+  // final words live when things work.
+  const readable = meaningfulLine(lastText) || meaningfulLine(lastStderr);
   if (readable) return readable.slice(0, 500);
   return `${productName} failed with exit code ${acc.exitStatus} and produced no readable message.`;
 }
