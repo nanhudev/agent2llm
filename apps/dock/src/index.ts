@@ -34,6 +34,7 @@ export function escapeHtml(value: string): string {
 
 export function renderDockPage(input: DockPageInput): string {
   const version = escapeHtml(input.version);
+  const cli = escapeHtml(CLI_PRIMARY_NAME);
   // `JSON.stringify` alone is not enough inside a <script>: a value containing
   // `</script>` would close the element. The token is base64url today, but this
   // is the one place a future change to its alphabet would become an XSS, so
@@ -61,6 +62,15 @@ ${DOCK_CSS}</style>
     <span class="pill">never moves another app's window</span>
   </div>
 
+  <!-- The mental model, stated once where the pairs render under it. The
+       client rewrites #pairs itself; the heading must live outside it. -->
+  <h2>Pairs — one Brain &times; one Harness</h2>
+  <div class="sub">
+    The Brain holds the conversation and the plan across goals; the Harness is the hands
+    that work in a folder. A Pair is the two of them joined, and the conversation outlives
+    any single run.
+  </div>
+
   <div id="pairs"></div>
 
   <div class="card">
@@ -69,8 +79,8 @@ ${DOCK_CSS}</style>
   </div>
 
   <footer>
-    This page is served by <code>a2l dock</code> on 127.0.0.1 and can only be reached from
-    this machine. It starts Relay runs through the same code path as <code>a2l run</code>;
+    This page is served by <code>${cli} dock</code> on 127.0.0.1 and can only be reached from
+    this machine. It starts Relay runs through the same code path as <code>${cli} run</code>;
     it does not talk to a cloud service, and it holds no handle to any window other than
     the tab you opened.
   </footer>
