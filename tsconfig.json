@@ -119,6 +119,9 @@
       "path": "packages/fixtures"
     },
     {
+      "path": "apps/dock"
+    },
+    {
       "path": "apps/cli"
     }
   ]

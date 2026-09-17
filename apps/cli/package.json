@@ -25,6 +25,7 @@
     "@agent2llm/bridge": "*",
     "@agent2llm/config": "*",
     "@agent2llm/core": "*",
+    "@agent2llm/dock": "*",
     "@agent2llm/harness-claude-code": "*",
     "@agent2llm/harness-codex": "*",
     "@agent2llm/harness-cursor": "*",

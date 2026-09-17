@@ -16,8 +16,9 @@
     "packages/workflows/*"
   ],
   "scripts": {
-    "build": "tsc -b tsconfig.json",
-    "rebuild": "node scripts/clean.mjs && tsc -b tsconfig.json",
+    "build": "npm run build:dock && tsc -b tsconfig.json",
+    "build:dock": "tsc -p apps/dock/tsconfig.client.json && node apps/dock/build.mjs",
+    "rebuild": "node scripts/clean.mjs && npm run build:dock && tsc -b tsconfig.json",
     "typecheck": "tsc -b tsconfig.json",
     "test": "node scripts/run-tests.mjs",
     "lint": "node scripts/lint.mjs",

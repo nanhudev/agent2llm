@@ -50,7 +50,7 @@ import type { Pair, RunRecord } from "@agent2llm/pairs";
 import { CLI_VERSION } from "@agent2llm/config";
 import { pairsStore, runsStore } from "./pair-select.js";
 import { runRelayGoal } from "./relay-goal.js";
-import { renderDockPage } from "./dock-page.js";
+import { renderDockPage } from "@agent2llm/dock";
 import * as ui from "../ui.js";
 
 /**

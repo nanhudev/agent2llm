@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../apps/dock"
+    },
+    {
       "path": "../../packages/adapter-sdk"
     },
     {
