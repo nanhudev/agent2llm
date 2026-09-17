@@ -90,12 +90,46 @@ export interface CreatePairResult {
   contextNote: string;
 }
 
+/**
+ * The Brain's (or Harness's) spend, exactly as the product accounts for it:
+ * a provider-reported pair of numbers, or the reason there is no number.
+ * `null` means nothing was measured at all. None of these shapes may be
+ * rendered as a fabricated 0.
+ */
+export type UsageAccountingView =
+  | { source: "provider-reported"; promptTokens: number; completionTokens: number; model?: string }
+  | { source: "unavailable"; reason: string };
+
+/** Measured text sizes. `estimatedTextTokens` is a bytes/4 estimate, never a provider's count. */
+export interface TextSizeView {
+  bytes: number;
+  estimatedTextTokens: number;
+}
+
+export interface RunMetricsView {
+  brainTurns: number;
+  harnessRuns: number;
+  filesChanged: number;
+  /** `null` means no test command reported a number — not zero. */
+  testsPassed: number | null;
+  revisions: number;
+  brainTokens: UsageAccountingView | null;
+  harnessUsage: UsageAccountingView | null;
+  harnessInstruction: TextSizeView;
+  harnessResponse: TextSizeView;
+  evidenceRaw: TextSizeView;
+  evidenceCompact: TextSizeView;
+  brainPrompt: TextSizeView;
+  brainResponse: TextSizeView;
+  elapsedMs: number;
+}
+
 export interface RunResult {
   runId: string;
   status: string;
   summary: string;
   iterations: number;
-  metrics: { filesChanged: number; elapsedMs: number };
+  metrics: RunMetricsView;
   conversation: { reused: boolean };
   pendingApprovals?: string[];
 }

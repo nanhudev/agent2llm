@@ -34,4 +34,8 @@
   .err-title { font-weight:600; color:var(--bad); margin-bottom:6px; }
   .err details { margin-top:8px; }
   .err pre { margin-top:6px; }
+  .result { font-size:13.5px; }
+  .result > div { margin-top:6px; }
+  details.metrics summary { cursor:pointer; color:var(--muted); margin-top:8px; }
+  details.metrics pre { margin-top:6px; }
   footer { color:var(--muted); font-size:12.5px; margin-top:26px; }

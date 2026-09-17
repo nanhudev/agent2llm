@@ -323,6 +323,23 @@ test("cli-dock", "the Run button runs the real relay path and reports the real s
   assert(body.iterations >= 1, `the harness was really dispatched to: ${body.iterations}`);
   assert(body.metrics && typeof body.metrics.elapsedMs === "number", "with measured numbers, not invented ones");
 
+  // The Brain's spend arrives as the accounting union — a provider-reported
+  // figure or the reason there is none — never as a bare number that could
+  // be a fabricated 0. Same discipline for the test count.
+  const tokens = body.metrics.brainTokens;
+  assert(
+    tokens === null ||
+      (typeof tokens === "object" && (tokens.source === "provider-reported" || tokens.source === "unavailable")),
+    `brain tokens carry the accounting union: ${JSON.stringify(tokens)}`
+  );
+  if (tokens && tokens.source === "unavailable") {
+    assert(typeof tokens.reason === "string" && tokens.reason.length > 0, "unavailable names its reason");
+  }
+  assert(
+    body.metrics.testsPassed === null || typeof body.metrics.testsPassed === "number",
+    "the test count is a number or an honest null"
+  );
+
   // The run is on the record, which is what makes it a run and not a keystroke.
   const after = await (await fetch(`http://${info.host}:${info.port}/api/state?token=${info.token}`)).json();
   assert(
