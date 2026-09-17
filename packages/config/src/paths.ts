@@ -70,3 +70,11 @@ export const DEFAULT_PORT = 47621;
 export const PRODUCT_NAME = "Agent2LLM";
 export const CLI_NAME = "agent2llm";
 export const CLI_ALIAS = "a2l";
+/**
+ * What the CLI reports as its version.
+ *
+ * Kept beside the name so the two cannot drift, and separate from
+ * `DEFAULT_HOST`/`DEFAULT_PORT` so a later change to those cannot silently move
+ * the dock off loopback.
+ */
+export const CLI_VERSION = "0.1.0";

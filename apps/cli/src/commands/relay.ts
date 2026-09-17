@@ -16,35 +16,17 @@
  *   a2l run "goal" --relay --brain B --harness H
  *                                       → relay, find-or-create the pair
  *   a2l run --brain B --harness H       → brain-hands, unchanged
+ *
+ * What is left in this file is the terminal rendering. The resolution and the
+ * run itself live in `relay-goal.ts`, because `a2l dock` starts runs through
+ * that same path and a second copy of the resolution rules would drift.
  */
-import { Logger } from "@agent2llm/logger";
-import { formatEventHuman, newId } from "@agent2llm/core";
 import type { AdapterRegistry, UserActionRequest } from "@agent2llm/adapter-sdk";
-import type { ContextMode, HarnessContext, Pair } from "@agent2llm/pairs";
-import { RelayRunner } from "@agent2llm/orchestrator";
-import {
-  ensurePair,
-  findPairByIdentity,
-  pairsStore,
-  resolvePairContext,
-  runsStore,
-  selectPair,
-} from "./pair-select.js";
+import type { RelayRunResult } from "@agent2llm/orchestrator";
+import { runRelayGoal, type RelayOptions } from "./relay-goal.js";
 import * as ui from "../ui.js";
 
-export interface RelayOptions {
-  pair?: string;
-  brain?: string;
-  harness?: string;
-  workspace?: string;
-  label?: string;
-  goal?: string;
-  json?: boolean;
-  verbose?: boolean;
-  maxIterations?: number;
-  /** Set when the user passed `--ignore-auth`, which Relay cannot honour yet. */
-  ignoreAuth?: boolean;
-}
+export type { RelayOptions };
 
 /** Bytes, in the units a human reads. Shared with nothing: it is two lines. */
 function formatBytes(bytes: number): string {
@@ -53,98 +35,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/**
- * The pair this run should use, created if the user named adapters instead.
- *
- * `notes` collects everything the user should be told but that must not stop
- * the run — a harness that could not report a context, or a stored context that
- * had gone stale.
- */
-async function resolvePair(
-  registry: AdapterRegistry,
-  options: RelayOptions,
-  notes: string[]
-): Promise<{ pair: Pair | null; context: HarnessContext | null; error?: string }> {
-  const store = pairsStore();
-
-  if (options.pair) {
-    const { pair, error } = selectPair(store, { pairId: options.pair });
-    if (!pair) return { pair: null, context: null, ...(error ? { error } : {}) };
-    return { pair, context: (await applyContext(registry, pair, options, notes)).context };
-  }
-
-  if (options.brain && options.harness) {
-    const mode: ContextMode = "harness-owned";
-    const { context, note } = await resolvePairContext(registry, {
-      harnessId: options.harness,
-      workspace: options.workspace,
-      mode,
-    });
-    const pair = ensurePair(store, {
-      brainAdapterId: options.brain,
-      harnessAdapterId: options.harness,
-      context,
-      contextMode: mode,
-    });
-    // `ensurePair` may have handed back a pair that already knew where it
-    // works, which is exactly what a re-used pair is for. A probe that failed
-    // must not turn into "no folder": the stored context is the fallback, and
-    // Relay only refuses when there is none.
-    const stored = pair.context?.root ? pair.context : null;
-    const usable = context ?? stored;
-    notes.push(usable === context ? note : `Kept this pair's stored context: ${stored?.root}. ${note}`);
-    return { pair, context: usable };
-  }
-
-  const { pair, error } = selectPair(store, {});
-  if (!pair) return { pair: null, context: null, ...(error ? { error } : {}) };
-  return { pair, context: (await applyContext(registry, pair, options, notes)).context };
-}
-
-/**
- * Ask the Harness where it is working, and keep the answer on the pair.
- *
- * The Harness owns the context, so when it reports a folder different from the
- * one this pair remembers, the pair follows — the conversation is the Brain's
- * and it should survive the user opening a different project. The stored
- * context is still what a run falls back to when the Harness cannot answer.
- */
-async function applyContext(
-  registry: AdapterRegistry,
-  pair: Pair,
-  options: RelayOptions,
-  notes: string[]
-): Promise<{ pair: Pair; context: HarnessContext | null }> {
-  const store = pairsStore();
-  const { context, note } = await resolvePairContext(registry, {
-    harnessId: pair.harnessAdapterId,
-    workspace: options.workspace,
-    remembered: pair.context,
-    mode: pair.contextMode,
-  });
-  if (!context) {
-    notes.push(note);
-    return { pair, context: null };
-  }
-  if (pair.context?.id === context.id) return { pair, context };
-
-  const clash = findPairByIdentity(store, {
-    brainAdapterId: pair.brainAdapterId,
-    harnessAdapterId: pair.harnessAdapterId,
-    context,
-  });
-  if (clash && clash.pairId !== pair.pairId) {
-    notes.push(
-      `The harness moved to ${context.root}, which pair ${clash.pairId} already covers. ` +
-        `Continuing ${pair.pairId}'s conversation there; remove the duplicate with 'a2l pair remove'.`
-    );
-  } else {
-    notes.push(note);
-  }
-  return { pair: store.save({ ...pair, context }), context };
-}
-
-function reportMetrics(result: Awaited<ReturnType<RelayRunner["run"]>>): void {
+function reportMetrics(result: RelayRunResult): void {
   const m = result.metrics;
   const tokens = m.brainTokens;
   ui.line();
@@ -182,62 +73,69 @@ function reportMetrics(result: Awaited<ReturnType<RelayRunner["run"]>>): void {
 }
 
 export async function runRelay(registry: AdapterRegistry, options: RelayOptions): Promise<number> {
-  const notes: string[] = [];
-  const { pair, context, error } = await resolvePair(registry, options, notes);
-  if (!pair) {
-    ui.fail(error ?? "No pair to run.");
-    return 2;
-  }
-
+  const events: string[] = [];
   const goal = options.goal ?? (await ui.promptText("Goal"));
   if (goal.trim() === "") {
     ui.warn("No goal supplied; nothing to do.");
     return 0;
   }
 
-  ui.heading(`Relay — ${pair.brainAdapterId} × ${pair.harnessAdapterId}`);
-  ui.line(ui.dim(`pair:    ${pair.label ? `${pair.label} (${pair.pairId})` : pair.pairId}`));
-  ui.line(ui.dim(`context: ${context?.root ?? "(none)"} [${context?.source ?? "unresolved"}]`));
-  ui.line(ui.dim(`policy:  ${pair.executionPolicy.mode} — the harness executes, it does not plan`));
-  for (const note of notes) ui.line(ui.dim(`note:    ${note}`));
-  if (options.ignoreAuth) {
-    ui.line(ui.dim("note:    --ignore-auth is not used by Relay Mode; each adapter keeps its own sign-in state."));
-  }
-  ui.line();
-
-  const events: string[] = [];
-  const runner = new RelayRunner({
-    registry,
-    pairs: pairsStore(),
-    runs: runsStore(),
-    logger: new Logger({ name: "relay", level: options.verbose ? "debug" : "info", console: false }),
-    emit: (event) => {
-      events.push(formatEventHuman(event));
-      if (!options.json) ui.line(`  ${formatEventHuman(event)}`);
-    },
-    requestUserAction: (action: UserActionRequest) => ui.requestUserAction(action),
-  });
-
-  const spin = ui.spinner("Talking to the brain");
+  // A holder rather than a `let`: the spinner is created inside a callback, and
+  // TypeScript narrows a `let` that is only assigned there to `never`.
+  const progress: { spinner: ui.Spinner | null } = { spinner: null };
+  let outcome: Awaited<ReturnType<typeof runRelayGoal>>;
   try {
-    const result = await runner.run({
-      pair,
-      runId: newId("a2lr", 5),
-      goal,
-      context,
-      ...(options.maxIterations ? { maxIterations: options.maxIterations } : {}),
+    outcome = await runRelayGoal(registry, { ...options, goal }, {
+      // The header goes out before the first dispatch, not after the run: a
+      // user watching a five-minute execution needs to know which pair and
+      // which folder they are watching while it happens.
+      onResolved: ({ pair, context, notes }) => {
+        if (!options.json) {
+          ui.heading(`Relay — ${pair.brainAdapterId} × ${pair.harnessAdapterId}`);
+          ui.line(ui.dim(`pair:    ${pair.label ? `${pair.label} (${pair.pairId})` : pair.pairId}`));
+          ui.line(ui.dim(`context: ${context?.root ?? "(none)"} [${context?.source ?? "unresolved"}]`));
+          ui.line(ui.dim(`policy:  ${pair.executionPolicy.mode} — the harness executes, it does not plan`));
+          for (const note of notes) ui.line(ui.dim(`note:    ${note}`));
+          if (options.ignoreAuth) {
+            ui.line(
+              ui.dim("note:    --ignore-auth is not used by Relay Mode; each adapter keeps its own sign-in state.")
+            );
+          }
+          ui.line();
+        }
+        progress.spinner = ui.spinner("Talking to the brain");
+      },
+      onEvent: (line) => {
+        events.push(line);
+        if (!options.json) ui.line(`  ${line}`);
+      },
+      requestUserAction: (action: UserActionRequest) => ui.requestUserAction(action),
     });
-    spin.stop();
-    if (options.json) {
-      ui.jsonOutput({ ...result, pairId: result.pairId, context: context?.root ?? null, notes, events });
-      return result.status === "done" ? 0 : 1;
-    }
-    ui.line(`  ${result.status === "done" ? ui.green("✓") : ui.yellow("!")} ${result.summary}`);
-    reportMetrics(result);
-    return result.status === "done" ? 0 : 1;
   } catch (err) {
-    spin.stop();
+    progress.spinner?.stop();
     ui.errorOutput(err);
     return 1;
   }
+  progress.spinner?.stop();
+
+  if (!outcome.ok) {
+    ui.fail(outcome.error);
+    return 2;
+  }
+
+  const { result } = outcome;
+  if (options.json) {
+    ui.jsonOutput({
+      ...result,
+      pairId: result.pairId,
+      context: outcome.context?.root ?? null,
+      notes: outcome.notes,
+      events,
+    });
+    return result.status === "done" ? 0 : 1;
+  }
+
+  ui.line(`  ${result.status === "done" ? ui.green("✓") : ui.yellow("!")} ${result.summary}`);
+  reportMetrics(result);
+  return result.status === "done" ? 0 : 1;
 }

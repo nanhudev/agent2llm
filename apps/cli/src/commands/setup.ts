@@ -4,7 +4,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { AdapterRegistry } from "@agent2llm/adapter-sdk";
-import { getStateDir, loadMachineConfig, patchMachineConfig, machineConfigPath } from "@agent2llm/config";
+import {
+  CLI_NAME,
+  CLI_VERSION,
+  getStateDir,
+  loadMachineConfig,
+  patchMachineConfig,
+  machineConfigPath,
+} from "@agent2llm/config";
 import { startBridge } from "@agent2llm/bridge";
 import { createTunnelProvider } from "@agent2llm/tunnel";
 import { WorkspaceRegistry } from "@agent2llm/workspace";
@@ -108,7 +115,7 @@ export async function runLogs(options: { json?: boolean; lines?: number } = {}):
 }
 
 export function runVersion(): void {
-  ui.jsonOutput({ name: "agent2llm", version: "0.1.0", protocol: "a2l/1", node: process.version });
+  ui.jsonOutput({ name: CLI_NAME, version: CLI_VERSION, protocol: "a2l/1", node: process.version });
 }
 
 export function runConfigSet(key: string, value: string): void {
