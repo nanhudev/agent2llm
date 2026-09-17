@@ -1,0 +1,97 @@
+# Release artifact packaging — dormant until a tag is pushed.
+#
+# Builds the single-executable artifacts (scripts/package-sea.mjs, Node SEA +
+# postject): agent2llm.exe on Windows, a .dmg on macOS, a raw binary on Linux.
+# A mock goal is run *through the packaged executable* on every runner OS, so
+# an artifact that cannot actually run never leaves this workflow as a pass.
+#
+# This workflow only uploads workflow artifacts. It never creates a GitHub
+# Release, never publishes to npm, and never moves a tag: cutting a release
+# is a deliberate human act gated by the release checklist, not a side
+# effect of pushing a tag by accident.
+#
+# Honest limitations, stated here so they end up in the release notes:
+#   - The Windows binary is unsigned; SmartScreen will warn on first run
+#     ("More info" -> "Run anyway").
+#   - The macOS binary is ad-hoc signed; Gatekeeper needs right-click -> Open
+#     on first run. A signed and notarized build needs an Apple Developer
+#     identity this repository does not have.
+#   - Each executable embeds the Node binary of the runner that built it
+#     (~85 MB), and the embedded playwright probe reports not-installed: the
+#     CDP attach path and the manual transport work, Playwright launch does
+#     not. That is a fact about executables without node_modules, not a bug.
+name: Release artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  exe:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: Windows exe }
+          - { os: macos-latest, name: macOS dmg }
+          - { os: ubuntu-latest, name: Linux binary }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Package executable
+        run: node scripts/package-sea.mjs
+
+      - name: Smoke the executable
+        shell: bash
+        env:
+          AGENT2LLM_STATE_DIR: ${{ runner.temp }}/a2l-sea-smoke
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then EXE=dist/sea/agent2llm.exe; else EXE=dist/sea/agent2llm; fi
+          "$EXE" --help
+          "$EXE" run --brain mock-brain --harness mock-harness --goal "sea smoke"
+
+      - name: Assemble macOS dmg
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist/sea/dmg/agent2llm
+          cp dist/sea/agent2llm dist/sea/dmg/agent2llm/agent2llm
+          cp README.md dist/sea/dmg/agent2llm/README.md
+          hdiutil create -volname agent2llm -srcfolder dist/sea/dmg/agent2llm -format UDZO "agent2llm-${{ github.ref_name }}-macos.dmg"
+
+      - name: Upload (Windows exe)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent2llm-${{ github.ref_name }}-windows
+          path: dist/sea/agent2llm.exe
+
+      - name: Upload (macOS dmg)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent2llm-${{ github.ref_name }}-macos
+          path: agent2llm-${{ github.ref_name }}-macos.dmg
+
+      - name: Upload (Linux binary)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent2llm-${{ github.ref_name }}-linux
+          path: dist/sea/agent2llm
