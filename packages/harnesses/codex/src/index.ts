@@ -14,6 +14,7 @@
  * turn.completed and error.
  */
 import { withCapabilities, type CapabilityManifest } from "@agent2llm/protocol";
+import path from "node:path";
 import {
   CliHarnessAdapter,
   parseJsonLine,
@@ -40,6 +41,13 @@ import type {
  */
 const CODEX_HOME_DIRS = homeDirectories([".codex/.sandbox-bin", ".codex/bin"]);
 
+/**
+ * Candidate paths are built with `path.join`, not string concatenation: the
+ * discovered path is printed verbatim by `agent2llm detect`, and a Windows user
+ * should not be shown `\.codex\.sandbox-bin/codex.exe`.
+ */
+const CODEX_CANDIDATES = CODEX_HOME_DIRS.map((dir) => path.join(dir, "codex.exe"));
+
 const PROFILE: CliHarnessProfile = {
   id: "codex",
   name: "Codex",
@@ -47,7 +55,7 @@ const PROFILE: CliHarnessProfile = {
   vendor: "OpenAI",
   homepage: "https://developers.openai.com/codex",
   drives: "codex",
-  candidates: CODEX_HOME_DIRS.map((dir) => `${dir}/codex.exe`),
+  candidates: CODEX_CANDIDATES,
   versionedDirs: CODEX_HOME_DIRS,
   versionedPattern: /^codex-command-runner-[\d.]+(?:-[a-z]+\.[\d.]+)*\.exe$/i,
   // `codex --help` only lists subcommands; the flags live under `exec`.
@@ -66,7 +74,14 @@ export class CodexHarnessAdapter extends CliHarnessAdapter {
         ...result,
         notes: [
           ...(result.notes ?? []),
-          this.hasFlag("exec") ? "`codex exec` is available for non-interactive runs." : "`codex exec` was not advertised by this build.",
+          // Only claim what was measured. A quick detect skips the help probe,
+          // and saying "not advertised by this build" on the strength of not
+          // having looked is a false statement about the product.
+          this.flagsProbed
+            ? this.hasFlag("exec")
+              ? "`codex exec` is available for non-interactive runs."
+              : "`codex exec` was not advertised by this build."
+            : "Flag surface not read: this was a --quick probe. Re-run `agent2llm detect` without --quick for the real answer.",
         ],
       };
     }

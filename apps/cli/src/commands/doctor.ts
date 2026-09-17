@@ -114,7 +114,10 @@ export async function runDoctor(
     ...(browser.installed ? {} : { repair: "npm i -D playwright && npx playwright install chromium" }),
   });
 
-  const detections = await registry.detectAll(true);
+  // `doctor` is the command a user runs to find out what is actually on the
+  // machine, so it pays for the real probe: a report that cannot say which
+  // version of a detected tool is installed has not answered the question.
+  const detections = await registry.detectAll(false);
   for (const detection of detections) {
     const status = detection.detection.status;
     const result: CheckResult =
@@ -125,10 +128,11 @@ export async function runDoctor(
           : status === "unavailable"
             ? "FAIL"
             : "WARN";
+    const version = detection.detection.version ? ` · ${detection.detection.version}` : "";
     checks.push({
       name: `Adapter ${detection.id}`,
       result,
-      message: detection.detection.reason ?? status,
+      message: `${detection.detection.reason ?? status}${version}`,
       ...(result === "PASS"
         ? {}
         : { repair: `Install ${detection.drives ?? detection.name}, then run 'agent2llm detect'.` }),

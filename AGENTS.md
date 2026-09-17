@@ -45,6 +45,12 @@ agent2llm run --brain mock-brain --harness mock-harness --goal smoke
 - The `run` line is a full workflow loop with the built-in mock pair. It
   needs no login, no API keys, no browser. If it prints `✓ Task complete.`
   the install is good.
+- Detection is thorough by default: one version probe and one `--help` read per
+  detected tool. `--quick` skips both, and is only correct for a caller that
+  acts on the name alone. It reports an unmeasured version as `unknown` and an
+  unread flag surface as unread — never as absent — so a `--quick` capability
+  list full of `false` means "not measured", not "broken". Re-run without
+  `--quick` before concluding anything about a harness.
 
 ## Wiring a real brain (what the human probably wants next)
 

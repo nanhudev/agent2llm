@@ -78,7 +78,16 @@ export class AdapterRegistry {
     });
   }
 
-  async detectAll(quick = true): Promise<AdapterDetection[]> {
+  /**
+   * Detect every registered adapter.
+   *
+   * The default is the *thorough* probe, because the result of this call is
+   * almost always printed somewhere a human reads it, and a report is only
+   * useful if it separates "not installed" from "not looked at". A quick pass
+   * is an optimisation for a caller that can act on the name alone, and it
+   * has to ask for it by name.
+   */
+  async detectAll(quick = false): Promise<AdapterDetection[]> {
     const adapters: AnyAdapter[] = [...this.brains.values(), ...this.harnesses.values()];
     const results: AdapterDetection[] = [];
     for (const adapter of adapters) {

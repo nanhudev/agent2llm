@@ -21,6 +21,25 @@ export interface BinaryLocation {
 
 const WINDOWS_EXTENSIONS = [".exe", ".cmd", ".bat", ".ps1"];
 
+/**
+ * Output that is a complaint, not an answer.
+ *
+ * `shell: true` on Windows runs through `cmd.exe`, which answers a missing or
+ * unrunnable target in the console's language — `'x' is not recognized as an
+ * internal or external command`, localized, sometimes with mojibake. Taking
+ * the first line of that put an error message in the VERSION column of
+ * `agent2llm adapters`, which is worse than an honest `unknown`: it looks like
+ * data. Only a short, single-token-ish line that is not obviously an error is
+ * accepted as a version.
+ */
+function looksLikeDiagnostic(text: string): boolean {
+  if (text.length > 80) return true;
+  if (/[\\/]/.test(text) && /\s/.test(text)) return true; // a path inside a sentence
+  return /not recognized|not found|no such file|cannot find|is not|не является|不是内部|找不到|不是可运行|command not/i.test(
+    text
+  );
+}
+
 function pathDirectories(): string[] {
   const raw = process.env.PATH ?? "";
   return raw
@@ -76,33 +95,89 @@ function commonDirectories(): string[] {
   }
 }
 
-/** Version probe: `--version`, then `-V`, then `version`. Never throws. */
+/**
+ * Version probe: `--version`, then `-V`, then `version`. Never throws.
+ *
+ * On Windows a POSIX shim (`#!/bin/sh`, which is what npm writes for every
+ * global package) cannot be spawned directly — `spawn` reports ENOENT, not
+ * EACCES, so the probe looks like "this binary has no version" when the real
+ * story is "this file needs a shell". Since `npm install -g` is the most
+ * common way to get these tools, that would leave most harnesses reporting
+ * `version: unknown` on the platform most of this project's users run.
+ *
+ * So a failed direct spawn falls back to `shell: true`, which lets the OS
+ * resolve the shim. The fallback is attempted only when the direct spawn
+ * produced nothing, so genuinely executable binaries pay no extra cost.
+ */
 export function readVersion(binPath: string, timeoutMs = 8000): Promise<string | null> {
   const attempts: string[][] = [["--version"], ["-V"], ["version"]];
-  const run = (args: string[]): Promise<string | null> =>
+
+  const spawnOnce = (
+    command: string,
+    args: string[],
+    useShell: boolean
+  ): Promise<string | null> =>
     new Promise((resolve) => {
       try {
-        const child = spawn(binPath, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+        const child = spawn(command, args, {
+          stdio: ["ignore", "pipe", "pipe"],
+          windowsHide: true,
+          ...(useShell ? { shell: true } : {}),
+        });
         let output = "";
+        // A failed spawn must settle the promise, and `shell: true` changes
+        // which event arrives first, so both paths funnel through one guard.
+        let settled = false;
+        const finish = (value: string | null) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        };
         const timer = setTimeout(() => {
           child.kill();
-          resolve(null);
+          finish(null);
         }, timeoutMs);
-        child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
-        child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
-        child.on("error", () => {
-          clearTimeout(timer);
-          resolve(null);
-        });
-        child.on("close", (code) => {
-          clearTimeout(timer);
+        child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
+        child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
+        child.on("error", () => finish(null));
+        child.on("close", () => {
           const first = output.trim().split(/\r?\n/)[0]?.trim() ?? "";
-          resolve(code === 0 && first !== "" ? first.slice(0, 120) : first === "" ? null : first);
+          if (first === "" || looksLikeDiagnostic(first)) return finish(null);
+          finish(first.slice(0, 120));
         });
       } catch {
         resolve(null);
       }
     });
+
+  /**
+   * How to actually run this file, which is not always "run it directly".
+   *
+   * Direct first. Then, on Windows only, the file's own shebang interpreter:
+   * `npm install -g` writes a POSIX `#!/bin/sh` shim, and Windows has no
+   * loader for that. `sh` on PATH (Git for Windows, which most Windows
+   * developers already have) runs it the way the shim expects. When there is
+   * no usable shebang, the `.cmd` sibling npm also writes is the last resort.
+   */
+  const invocations = (args: string[]): { command: string; args: string[]; shell: boolean }[] => {
+    const direct = [{ command: binPath, args, shell: false }];
+    if (process.platform !== "win32") return direct;
+    const invocations: { command: string; args: string[]; shell: boolean }[] = [...direct];
+    const shebang = readShebang(binPath);
+    if (shebang) invocations.push({ command: shebang, args: [binPath, ...args], shell: false });
+    const cmdShim = `${binPath}.cmd`;
+    if (fs.existsSync(cmdShim)) invocations.push({ command: cmdShim, args, shell: false });
+    return invocations;
+  };
+
+  const run = async (args: string[]): Promise<string | null> => {
+    for (const call of invocations(args)) {
+      const version = await spawnOnce(call.command, call.args, call.shell);
+      if (version) return version;
+    }
+    return null;
+  };
 
   return (async () => {
     for (const args of attempts) {
@@ -111,6 +186,39 @@ export function readVersion(binPath: string, timeoutMs = 8000): Promise<string |
     }
     return null;
   })();
+}
+
+/**
+ * The `#!` interpreter of a script, resolved to something runnable here.
+ *
+ * Two shapes matter. `#!/bin/sh` is the npm POSIX shim; `#!/usr/bin/env node`
+ * is what most real CLI scripts (and any locally-run `.js` bin) declare. Both
+ * are POSIX paths that Windows cannot execute, but the *interpreter* is a bare
+ * program name — `sh`, `node` — which is very often already on PATH. So take
+ * the basename of the shebang target, and when it is `env`, take the basename
+ * of the argument that follows it instead of giving up.
+ */
+export function readShebang(file: string): string | null {
+  let head: string;
+  try {
+    const fd = fs.openSync(file, "r");
+    const buffer = Buffer.alloc(128);
+    const read = fs.readSync(fd, buffer, 0, 128, 0);
+    fs.closeSync(fd);
+    head = buffer.subarray(0, read).toString("utf8");
+  } catch {
+    return null;
+  }
+  const match = /^#!\s*(\S+)(?:\s+(\S+))?/.exec(head);
+  if (!match?.[1]) return null;
+  let interpreter = path.basename(match[1]);
+  if (interpreter === "env") {
+    const inner = match[2] ? path.basename(match[2]) : "";
+    if (inner === "" || inner.startsWith("-")) return null;
+    interpreter = inner;
+  }
+  if (interpreter === "") return null;
+  return findInPath(interpreter);
 }
 
 export interface LocateOptions {

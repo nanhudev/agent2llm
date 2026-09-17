@@ -18,7 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test, assert, assertEqual } from "@agent2llm/testing";
-import { newestInDirectory, homeDirectories, locateBinary } from "@agent2llm/detect";
+import { newestInDirectory, homeDirectories, locateBinary, readShebang, readVersion, findInPath } from "@agent2llm/detect";
 import { readHelp, helpMentions } from "@agent2llm/transports";
 import { report } from "./_report.mjs";
 
@@ -147,6 +147,72 @@ test("binary-discovery", "readHelp puts the subcommand before the help flag", as
   // helpMentions is what turns that text into a capability fact.
   assert(helpMentions(sub, "--json"), "--json must be detected from the subcommand help");
   assert(!helpMentions(top, "--json"), "--json must not be detected from the top-level help");
+});
+
+/**
+ * A version probe must answer "I don't know" rather than "here is an error".
+ *
+ * On Windows the fallback path runs through `cmd.exe`, which answers a missing
+ * or unrunnable target in the console's own language: `'D:\…\codebuddy' 不是内部
+ * 或外部命令`. Taking the first line of that put a Chinese error message in the
+ * VERSION column of `agent2llm adapters` — worse than an honest `unknown`,
+ * because it looks like data.
+ *
+ * The fake here is a real Node script whose *stdout* is an error string, so it
+ * spawns cleanly and still prints garbage. That isolates the rejection rule
+ * from the spawn mechanics. `readVersion` must return null, not the text.
+ */
+test("binary-discovery", "an error message is never reported as a version", async () => {
+  const dir = scratch("diagnostic");
+  const noisy = path.join(dir, "noisy-cli.mjs");
+  const diagnostics = [
+    "'D:\\tools\\codebuddy' 不是内部或外部命令，也不是可运行的程序或批处理文件。",
+    "bash: codex: command not found",
+    "'x' is not recognized as an internal or external command",
+    "no such file or directory",
+  ];
+  for (const diagnostic of diagnostics) {
+    fs.writeFileSync(noisy, `console.log(${JSON.stringify(diagnostic)});\n`);
+    const viaScript = await readVersion(noisy, 5000);
+    assert(
+      viaScript === null || !/不是内部|command not found|not recognized|no such file/i.test(viaScript),
+      `readVersion must not return a diagnostic, got: ${viaScript}`
+    );
+  }
+  // A genuine version still comes through — the rejection is not a blanket ban.
+  const real = await readVersion(process.execPath, 8000);
+  assert(real !== null && /^v?\d+\./.test(real), `node must still report its version, got: ${real}`);
+});
+
+/**
+ * `npm install -g` writes a POSIX shim, and Windows cannot execute one.
+ *
+ * The shim declares its interpreter on line one: `#!/bin/sh` for npm's own
+ * shim, `#!/usr/bin/env node` for most real CLI scripts. Both are POSIX paths,
+ * but the interpreter name — `sh`, `node` — is usually already on PATH. The
+ * probe therefore has to read the shebang and re-invoke the interpreter
+ * instead of reporting `version: unknown` on the platform most users run.
+ *
+ * The assertion is on the interpreter *name* rather than on a version string,
+ * so it holds on a machine without npm installed.
+ */
+test("binary-discovery", "a shebang shim is resolved through its interpreter", async () => {
+  const dir = scratch("shebang");
+  const shim = path.join(dir, "shim-cli");
+  fs.writeFileSync(shim, "#!/bin/sh\necho 1.2.3\n");
+  const envShim = path.join(dir, "env-cli");
+  fs.writeFileSync(envShim, "#!/usr/bin/env node\nconsole.log('4.5.6');\n");
+  const envMissing = path.join(dir, "env-missing-cli");
+  fs.writeFileSync(envMissing, "#!/usr/bin/env not-an-interpreter-anywhere\necho 9.9.9\n");
+
+  assertEqual(readShebang(shim), findInPath("sh"), "`#!/bin/sh` resolves to the sh on PATH");
+  assertEqual(readShebang(envShim), findInPath("node"), "`env X` must resolve to X, not be dropped");
+  assertEqual(
+    readShebang(envMissing),
+    null,
+    "an interpreter that is not installed must not be invented"
+  );
+  assertEqual(readShebang(path.join(dir, "absent")), null, "a missing file is not an error");
 });
 
 await report();

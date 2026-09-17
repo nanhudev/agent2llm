@@ -80,9 +80,9 @@ function usage(): void {
   ui.line(`    ${CLI_NAME} run --brain X --harness Y [--goal G] [--endpoint URL]`);
   ui.line(ui.dim("      [--ignore-auth] [--dry-run] [--max-iterations N] [--session ID]"));
   ui.line(`    ${CLI_NAME} setup [--brain X] [--harness Y] [--tunnel]`);
-  ui.line(`    ${CLI_NAME} detect [--json]`);
+  ui.line(`    ${CLI_NAME} detect [--json] [--quick]`);
   ui.line(`    ${CLI_NAME} doctor [--json]`);
-  ui.line(`    ${CLI_NAME} adapters|brains|harnesses [--json]`);
+  ui.line(`    ${CLI_NAME} adapters|brains|harnesses [--json] [--quick]`);
   ui.line(`    ${CLI_NAME} session list|show|resume|stop [id]`);
   ui.line(`    ${CLI_NAME} workspace list|add|remove [path|id]`);
   ui.line(`    ${CLI_NAME} pair|unpair [workspace]`);
@@ -97,12 +97,17 @@ function usage(): void {
   ui.line(ui.dim("  a DevTools port (--endpoint, or AGENT2LLM_ATTACH_ENDPOINT); otherwise"));
   ui.line(ui.dim("  they launch their own browser, and fall back to manual last."));
   ui.line(ui.dim("  --ignore-auth runs even when an adapter measured that it is not signed in."));
+  ui.line(ui.dim("  --quick skips the version and help probes. Detection is thorough by default,"));
+  ui.line(ui.dim("  because reporting a gap as `unknown` beats reporting a guess as a fact."));
   ui.line();
 }
 
 async function interactiveLauncher(registry: ReturnType<typeof createRegistry>): Promise<number> {
   ui.line(BANNER);
-  const detections = await registry.detectAll(true);
+  // Full probe: the launcher is the one screen a new user sees, and a harness
+  // listed as present with no version is what makes people think the install
+  // is broken. The launcher runs once, so the probe cost is paid once.
+  const detections = await registry.detectAll();
   const byId = new Map(detections.map((d) => [d.id, d]));
 
   const show = (ids: readonly string[], title: string): void => {
@@ -164,7 +169,7 @@ async function main(): Promise<number> {
   try {
     switch (command) {
       case "detect":
-        await runDetect(registry, { json });
+        await runDetect(registry, { json, quick: bool(flags.quick) });
         return 0;
 
       case "doctor":
@@ -172,18 +177,19 @@ async function main(): Promise<number> {
         return 0;
 
       case "adapters":
-        await runAdapters(registry, { json });
+        await runAdapters(registry, { json, quick: bool(flags.quick) });
         return 0;
 
       case "brains":
       case "harnesses": {
         const role = command === "brains" ? "brain" : "harness";
-        const results = await registry.detectAll(true);
+        const results = await registry.detectAll(bool(flags.quick));
         if (json) {
           ui.jsonOutput(results.filter((r) => r.role === role));
         } else {
           for (const result of results.filter((r) => r.role === role)) {
-            ui.line(`  ${result.id.padEnd(18)} ${result.name.padEnd(20)} ${ui.dim(result.detection.status)}`);
+            const version = result.detection.version ? ui.dim(` ${result.detection.version}`) : "";
+            ui.line(`  ${result.id.padEnd(18)} ${result.name.padEnd(20)} ${ui.dim(result.detection.status)}${version}`);
           }
         }
         return 0;

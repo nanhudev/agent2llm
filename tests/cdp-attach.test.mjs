@@ -179,7 +179,19 @@ test("cdp-attach", "an attached window can be driven, and survives detaching", a
   } finally {
     child.kill();
     await new Promise((resolve) => setTimeout(resolve, 800));
-    fs.rmSync(profile, { recursive: true, force: true });
+    // Cleanup must not decide the verdict. On Windows a just-killed browser
+    // still holds handles inside its profile directory for a moment, so
+    // `rmSync` throws EPERM — a teardown artifact that would otherwise fail a
+    // test whose assertions have already passed. Retry briefly, then let the
+    // OS reclaim it: a temp directory is not worth a red suite.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        fs.rmSync(profile, { recursive: true, force: true });
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    }
   }
 });
 

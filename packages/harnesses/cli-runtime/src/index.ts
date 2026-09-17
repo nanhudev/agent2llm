@@ -9,8 +9,9 @@
  */
 import { emptyManifest, type CapabilityManifest } from "@agent2llm/protocol";
 import { harnessUnavailable } from "@agent2llm/core";
-import { locateBinary, type BinaryLocation } from "@agent2llm/detect";
+import { locateBinary, readVersion, type BinaryLocation } from "@agent2llm/detect";
 import { helpMentions, readHelp, runProcess, type RunningProcess, type RunOutcome } from "@agent2llm/transports";
+import { meaningfulLine, type ExecutionAccumulator } from "./helpers.js";
 import {
   BaseHarnessAdapter,
   type AdapterMetadata,
@@ -48,20 +49,12 @@ export interface CliHarnessProfile {
   drives?: string;
 }
 
-export interface ExecutionAccumulator {
-  ok: boolean;
-  exitStatus: string;
-  changedFiles: string[];
-  tests: string | null;
-  summary: string;
-  commands: string[];
-  sessionRef: string | null;
-}
-
 export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
   protected location: BinaryLocation | null = null;
   protected help: string | null = null;
   private detectAttempted = false;
+  /** Did the last detect actually read `--help`, or skip it as too expensive? */
+  private helpProbed = false;
   private readonly runs = new Map<string, RunningProcess>();
   private readonly sessionRefs = new Map<string, string>();
 
@@ -95,6 +88,19 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
     return super.capabilities();
   }
 
+  /**
+   * Probe the flag surface when the report is about to be read by a human.
+   *
+   * `hasFlag` cannot answer before `--help` is read, and a capability report
+   * full of `false` is worse than a slow one: it is indistinguishable from a
+   * build that genuinely lacks the flags. Commands that display capabilities
+   * call this first; `run` does it implicitly through `execute()`.
+   */
+  async capabilitiesResolved(): Promise<CapabilityManifest> {
+    await this.resolveFlags();
+    return this.capabilities();
+  }
+
   // ---- discovery -----------------------------------------------------------
 
   async detect(ctx: DetectContext = {}): Promise<DetectionResult> {
@@ -110,7 +116,10 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
       const found = await locateBinary(name, locateOptions);
       if (found) {
         this.location = found;
-        if (!ctx.quick) this.help = await this.readHelpFor(found.path);
+        if (!ctx.quick) {
+          this.help = await this.readHelpFor(found.path);
+          this.helpProbed = true;
+        }
         return {
           status: "detected",
           binaryPath: found.path,
@@ -152,9 +161,46 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
     return this.location;
   }
 
-  /** True when the probed `--help` output mentions the flag. */
+  /**
+   * True when the probed `--help` output mentions the flag.
+   *
+   * A quick detect skips the help probe, and answering `false` for a question
+   * nobody asked is how a fully working Codex came to be reported with
+   * `version: unknown` and every capability switched off: the CLI always
+   * detects quickly, so the flag surface was never read, and the manifest
+   * stated the absence of flags as fact. An unprobed harness therefore reports
+   * *no* claim rather than a negative one, and `resolveFlags()` fetches the
+   * real answer before a run depends on it.
+   */
   protected hasFlag(flag: string): boolean {
     return helpMentions(this.help, flag);
+  }
+
+  /** True once `--help` has actually been read, so `hasFlag` means something. */
+  protected get flagsProbed(): boolean {
+    return this.helpProbed;
+  }
+
+  /**
+   * Complete the report before a human reads it.
+   *
+   * A quick detect skips two things, and both look like facts when they are
+   * gaps: the flag surface was never read, and the version was never probed.
+   * Filling in only the flags still leaves `agent2llm adapters` printing
+   * `unknown` for a harness it just found, which reads as a broken install.
+   * `run` also needs this: `buildArgs` gates `--json` on `hasFlag`, so an
+   * unprobed harness would silently drop the flag its own parser needs.
+   */
+  protected async resolveFlags(): Promise<void> {
+    if (!this.location && !this.detectAttempted) await this.detect();
+    if (!this.location) return;
+    if (!this.helpProbed) {
+      this.help = await this.readHelpFor(this.location.path);
+      this.helpProbed = true;
+    }
+    if (this.location.version === null) {
+      this.location = { ...this.location, version: await readVersion(this.location.path) };
+    }
   }
 
   protected emptyManifestFor(transport: CapabilityManifest["transport"]): CapabilityManifest {
@@ -191,6 +237,11 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
 
   async execute(session: HarnessSession, task: ExecutionRequest): Promise<ExecutionHandle> {
     const bin = this.requireBinary();
+    // The argv is built from probed flags, so make sure they were probed. A
+    // run that skipped this dropped `--json` and then could not parse its own
+    // output, which reads as "the harness produced nothing" rather than as the
+    // missing probe it actually was.
+    await this.resolveFlags();
     const handleId = `${this.profile.id}-${task.taskId}-${task.iteration}-${Date.now()}`;
     const args = this.buildArgs(task, session);
     const proc = runProcess({
@@ -335,43 +386,7 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
   }
 }
 
-/**
- * A line worth showing a human, or null.
- *
- * Rejects the shapes that look like content and are not. A failing CLI is
- * chatty: it retries, falls back between transports, and prints whatever the
- * far end returned — which for a gateway is often an HTML page. None of that
- * answers "why did this fail?" better than the exit code already does.
- */
-function meaningfulLine(line: string): string | null {
-  const text = line.trim();
-  if (text === "") return null;
-  // The middle of a JSON object.
-  if (/^[{[,"]/.test(text)) return null;
-  // Mark-up, at the start or anywhere in a line that is mostly tags.
-  if (/^<\/?[a-z!]/i.test(text)) return null;
-  if (/<html|<!doctype|<head>|<body>/i.test(text)) return null;
-  // Retry and transport chatter — includes the embedded-error variant, where
-  // the harness wraps a gateway response inside its own progress message.
-  if (/reconnecting/i.test(text)) return null;
-  // A wrapped status line: "… unexpected status 403 Forbidden …".
-  if (/unexpected status \d{3}/i.test(text)) return null;
-  return text;
-}
-
-/** Shared helper: pull a JSON object out of a possibly-prefixed line. */
-export function parseJsonLine(line: string): Record<string, unknown> | null {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith("{")) return null;
-  try {
-    const value: unknown = JSON.parse(trimmed);
-    return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function stripAnsi(input: string): string {
-  // eslint-disable-next-line no-control-regex
-  return input.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "");
-}
+// Line-level helpers live in their own module to keep this file inside the
+// project's line budget. Re-exported because every harness adapter imports them
+// from this package's entry point.
+export { meaningfulLine, parseJsonLine, stripAnsi, type ExecutionAccumulator } from "./helpers.js";

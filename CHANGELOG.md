@@ -72,8 +72,47 @@ All notable changes are documented here. Format follows
   for a window whose port nobody can guess — the `--remote-debugging-port=0`
   case where the engine picks the port and no readable profile records it.
 - `tests/auth-honesty.test.mjs` covers the authentication rules below.
+- **`--quick` is a documented flag, and the only way to get a shallow probe.**
+  `agent2llm detect|adapters|brains|harnesses --quick` skips the version and
+  `--help` probes. Everything else — including the interactive launcher and
+  `doctor` — now runs the real probe, because a capability list is read by a
+  human and has to distinguish "absent" from "not looked at".
+- **`capabilitiesResolved()` on the CLI harness base class.** Resolving a
+  manifest that was never probed now has a name, so a command that is about to
+  print capabilities can pay for the flags first instead of printing `false`
+  for every one of them.
+- **Version probing works through POSIX shims on Windows.** `npm install -g`
+  writes a `#!/bin/sh` wrapper, and Windows cannot spawn one — `spawn` reports
+  ENOENT, which read as "this binary has no version". The probe now reads the
+  shebang and re-invokes the interpreter it names (`sh`, or the program after
+  `env`), falling back to npm's `.cmd` sibling when there is no usable
+  shebang. `readShebang()` is exported from `packages/detect`.
+- `tests/probe-depth.test.mjs` pins the rule that a quick probe may decline to
+  answer but may never turn "not measured" into a negative claim, and that
+  reading capabilities forces the full probe.
 
 ### Fixed
+
+- **Detection reported "not measured" as a fact, and called a working harness
+  broken.** Every `detectAll` caller passed `quick: true`, which skips both the
+  version probe and the `--help` read. The adapter then answered `hasFlag("exec")`
+  for a question nobody had asked, and `false` is indistinguishable from "this
+  build genuinely lacks the flag" — so `agent2llm detect` printed
+  `version: unknown`, switched every capability off, and stated
+  "`codex exec` was not advertised by this build" about a Codex that was
+  installed, signed in and working. `detectAll` now defaults to the thorough
+  probe, `hasFlag` on an unprobed harness says so instead of answering `false`,
+  and the version column distinguishes `unknown` from `-`.
+- **A shell error message was printed as a version.** The `shell: true` fallback
+  runs through `cmd.exe`, which answers an unrunnable target with
+  `'…' 不是内部或外部命令` in the console's own language. Taking the first line
+  of that put a Chinese error string in the VERSION column of `agent2llm
+  adapters` — worse than an honest `unknown`, because it looks like data. A
+  first line that reads as a diagnostic is now rejected.
+- **`agent2llm doctor` could not say which version was installed.** It reported
+  the reason for detection and stopped, so the question the command exists to
+  answer — "what is on this machine" — had no answer for any detected tool. The
+  version is now part of the check message.
 
 - **`--endpoint` was ignored by every read-only command.** `selectTransport()`
   honoured `AGENT2LLM_ATTACH_ENDPOINT`, but `doctor` and the desktop-app probe
