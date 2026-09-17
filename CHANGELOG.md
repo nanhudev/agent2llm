@@ -4,6 +4,42 @@ All notable changes are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] — 2026-09-17
+
+### Added
+
+- **The dock opens itself.** `a2l dock` no longer ends at a printed URL: the
+  page opens in an Edge/Chrome `--app` window when either browser is present
+  (no tabs, no address bar — a window that looks like the product), else the
+  default browser. Opening creates its own frame and never touches a window
+  the dock does not own; failure is never fatal, `--no-open` keeps the old
+  behaviour, and the JSON output gained an `opened` field.
+- **A desktop shortcut after a global install.** `npm i -g agent2llm` ends
+  with an **Agent2LLM Dock** icon on the desktop; double-clicking it runs
+  `a2l dock`, which starts the dock and opens its window. The work is a real
+  command — `a2l dock shortcut`, reversible with `--remove`, platform-native
+  artifacts (.lnk via the shell COM, a minimal .app bundle, a .desktop
+  entry), a programmatically drawn icon with zero dependencies — and the
+  postinstall is gated to global installs, skips CI and
+  `AGENT2LLM_NO_SHORTCUT=1`, and never fails the install.
+- **The packaged exe opens straight into the dock.** No arguments inside the
+  SEA binary used to mean the interactive launcher — invisible prompts in a
+  console nobody is watching. There, no command *is* the dock; terminals
+  keep the interview.
+
+### Fixed
+
+- **Detection is truthful by default.** `a2l adapters` printed every
+  registered adapter, and the dock form offered them flat — a machine with
+  nothing installed still saw eight "adapters", and *implemented* is not
+  *installed*. The default table now lists only what this machine can use
+  today (verified / detected / configured / authenticated), says how many
+  were left out, and `--all` still gives the full map; `--json` stays
+  complete. The dock catalog ships each entry's detection status and the
+  create form groups **On this machine** apart from **Needs setup** (with
+  " — not installed" labels), so picking an adapter is a decision, not a
+  surprise.
+
 ## [0.3.0] — 2026-09-17
 
 ### Added

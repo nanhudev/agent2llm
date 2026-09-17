@@ -33,6 +33,12 @@ that burns them per keystroke. In Relay Mode the Brain does not even need
 npm install -g agent2llm
 ```
 
+A global install also places an **Agent2LLM Dock** icon on your desktop.
+Double-click it any time: it starts the local dock and opens its page in an
+app-style window — no terminal needed. Skip it with `AGENT2LLM_NO_SHORTCUT=1`
+(CI environments skip it automatically); recreate or remove it later with
+`agent2llm dock shortcut` / `agent2llm dock shortcut --remove`.
+
 Or run it once without installing:
 
 ```bash
@@ -52,9 +58,14 @@ agent2llm doctor
 # 2. Prove the loop end to end with the mock pair (no login, no keys)
 agent2llm run --brain mock-brain --harness mock-harness --goal smoke
 
-# 3. See what each side can do
+# 3. See what each side can do — only what this machine can use today,
+#    with --all listing adapters that still need setup
 agent2llm adapters
 ```
+
+`agent2llm dock` opens its page by itself — an Edge/Chrome app-style window
+when one is present, else your default browser (`--no-open` keeps the old
+print-a-URL behaviour).
 
 `doctor` reports, among other checks, window attach (a running Chromium
 window on a DevTools port) and which harness executables it found. It never
