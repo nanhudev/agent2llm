@@ -29,8 +29,10 @@ export function usage(): void {
   ui.line(ui.dim("      Relay uses the brain and harness of a stored pair, so no --brain/--harness"));
   ui.line(ui.dim("      is needed. The harness owns the context: if it reports an open project,"));
   ui.line(ui.dim("      --workspace is not asked for."));
-  ui.line(`    ${CLI_PRIMARY_NAME} dock [--port N] [--workspace DIR]`);
-  ui.line(ui.dim("      A local page listing your pairs, with a goal box for each. Loopback"));
+  ui.line(`    ${CLI_PRIMARY_NAME} dock [--port N] [--workspace DIR] [--no-open]`);
+  ui.line(ui.dim("      A local page listing your pairs, with a goal box for each. The page"));
+  ui.line(ui.dim("      opens itself in an app-style window when Edge or Chrome is present,"));
+  ui.line(ui.dim("      else the default browser (--no-open prints the URL instead). Loopback"));
   ui.line(ui.dim("      only, one-time token, and it never moves another app's window."));
   ui.line(ui.bold("    Brain / Hands (the original workflow)"));
   ui.line(`    ${CLI_PRIMARY_NAME} run --brain X --harness Y [--goal G] [--endpoint URL]`);

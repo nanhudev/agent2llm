@@ -91,7 +91,9 @@ async function waitForDock(handle, timeoutMs = 30000) {
 
 async function ensureDock() {
   if (dock) return dock;
-  const handle = launch(["--json", "--port", "0"]);
+  // --no-open: the shared dock must not pop a browser window on every machine
+  // the suite runs on; the opener's own behaviour is asserted below instead.
+  const handle = launch(["--json", "--port", "0", "--no-open"]);
   const info = await waitForDock(handle);
   dock = { ...handle, info };
   return dock;
@@ -137,6 +139,11 @@ test("cli-dock", "port 0 is bound, and the address is loopback — not 0.0.0.0",
   assert(info.port > 0, `an ephemeral port was assigned: ${info.port}`);
   assertEqual(new URL(info.url).hostname, "127.0.0.1", "and the printed URL is on that host");
   assert(info.token.length >= 20, `the token is long enough to be a secret: ${info.token.length} chars`);
+});
+
+test("cli-dock", "--no-open keeps the opener out of the way, and the JSON says so", async () => {
+  const { info } = await ensureDock();
+  assertEqual(info.opened, null, "with --no-open the opener reports it did nothing");
 });
 
 test("cli-dock", "without the token nothing is served — not the page, not the state", async () => {

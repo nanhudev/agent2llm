@@ -54,6 +54,7 @@ import { CLI_PRIMARY_NAME, CLI_VERSION } from "@agent2llm/config";
 import { pairsStore, runsStore } from "./pair-select.js";
 import { runRelayGoal } from "./relay-goal.js";
 import { handleCreatePair } from "./dock-pairs.js";
+import { openDockWindow } from "./dock-open.js";
 import { renderDockPage } from "@agent2llm/dock";
 import {
   DOCK_HOST,
@@ -73,6 +74,12 @@ export interface DockOptions {
   port?: number;
   workspace?: string;
   json?: boolean;
+  /**
+   * Open the page automatically after listening (default true): a Chromium
+   * --app window when Edge/Chrome is present, else the system default
+   * browser. `--no-open` keeps the old print-a-URL behaviour.
+   */
+  open?: boolean;
 }
 
 export interface DockHandle {
@@ -273,6 +280,14 @@ export async function runDock(registry: AdapterRegistry, options: DockOptions): 
   }
 
   const pairs = pairsStore().list();
+  const opened =
+    options.open === false
+      ? null
+      : await openDockWindow(dock.url).catch((error: unknown) => ({
+          kind: null as "app-window" | "browser" | null,
+          how: null,
+          error: (error as Error).message,
+        }));
   if (options.json) {
     ui.jsonOutput({
       url: dock.url,
@@ -280,13 +295,19 @@ export async function runDock(registry: AdapterRegistry, options: DockOptions): 
       port: dock.port,
       token: dock.token,
       pairs: pairsForPage(pairs),
+      opened,
     });
   } else {
     ui.heading("Agent2LLM Dock");
     ui.line(ui.dim(`  listening on ${dock.host}:${dock.port} (loopback only, no other host is possible)`));
     ui.line(ui.dim(`  pairs: ${pairs.length}`));
-    ui.line();
-    ui.line(`  Open this URL — the token in it is the only way in:`);
+    if (opened?.how) {
+      ui.line(`  Opened ${opened.how}. If it did not come up, open:`);
+    } else if (opened?.error) {
+      ui.line(ui.dim(`  Could not open a browser automatically (${opened.error}). Open:`));
+    } else {
+      ui.line(`  Open this URL — the token in it is the only way in:`);
+    }
     ui.line(`  ${ui.cyan(dock.url)}`);
     ui.line();
     ui.line(ui.dim("  This page starts real Relay runs. It holds no handle to any window,"));

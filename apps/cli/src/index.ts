@@ -298,15 +298,18 @@ async function main(): Promise<number> {
         return 0;
 
       case "dock":
-        // No --host and no --open. No --host because a flag that turns a
-        // loopback page into a network service turns a local convenience into
-        // somebody else's remote execution endpoint. No --open because the dock
-        // printing a URL and letting the user click it is the whole reason it
-        // cannot disturb a window it does not own.
+        // No --host: a flag that turns a loopback page into a network service
+        // turns a local convenience into somebody else's remote execution
+        // endpoint. The page opens automatically instead of waiting for the
+        // user to click a printed URL (--no-open keeps the old behaviour);
+        // opening creates its own browser frame and never touches a window
+        // the dock does not own, which is the property the dock's security
+        // posture is built on.
         return runDock(registry, {
           ...(str(flags.port) ? { port: Number.parseInt(str(flags.port)!, 10) } : {}),
           ...(str(flags.workspace) ? { workspace: str(flags.workspace) } : {}),
           json,
+          ...(bool(flags["no-open"]) ? { open: false } : {}),
         });
 
       case "logs":
