@@ -6,6 +6,17 @@ All notable changes are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Device pairing moved under the bridge namespace.** The word "pair" named
+  two unrelated things: the Brain×Harness Pair that Relay Mode runs through,
+  and workspace-vs-bridge device pairing that only shared the vocabulary.
+  Device pairing now answers to `a2l bridge pair <workspace>` and
+  `a2l bridge unpair [workspace]`. The old `a2l pair <workspace>` /
+  `a2l unpair` spellings keep working — no script breaks — and each use
+  prints a deprecation notice pointing at the new command. The Pair domain
+  (`pair create` / `list` / `show` / `remove`) is unchanged.
+
 ### Fixed
 
 - **Usage terminology: harness model usage is unknown, not zero.** The 0.2.0
