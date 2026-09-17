@@ -4,6 +4,18 @@ All notable changes are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] — 2026-09-17
+
+### Fixed
+
+- **`--json` payloads larger than 8 KiB could arrive truncated.** The CLI
+  called `process.exit()` the moment a command resolved, and on a pipe
+  `process.stdout.write` is asynchronous — everything after the first pipe
+  chunk was lost when the process exited before the stream drained
+  (observed on a macOS runner, node 20, `adapters --json`, whose 0.3.1
+  payload is the first to exceed 8 KiB). `jsonOutput` now writes
+  synchronously to fd 1, so no exit can truncate a machine-readable output.
+
 ## [0.3.1] — 2026-09-17
 
 ### Added
