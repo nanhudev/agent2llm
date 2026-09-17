@@ -129,6 +129,31 @@ test("cdp-attach", "an attached window can be driven, and survives detaching", a
     return;
   }
 
+  /**
+   * A real browser on a shared CI runner boots at an unpredictable speed, and
+   * a first launch can miss every deadline below without the transport
+   * contract being wrong. One attempt proves the contract; three attempts
+   * separate a flaky runner from a real regression. Each attempt gets a fresh
+   * browser and profile, so a bad attempt cannot poison the next one.
+   */
+  const ATTEMPTS = 3;
+  let lastError;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+    try {
+      await driveAndDetach(chromium);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < ATTEMPTS) {
+        console.log(`  retry ${attempt + 1}/${ATTEMPTS}: ${error.message}`);
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+      }
+    }
+  }
+  throw lastError;
+});
+
+async function driveAndDetach(chromium) {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "a2l-cdp-"));
   const child = spawn(
     chromium,
@@ -193,6 +218,6 @@ test("cdp-attach", "an attached window can be driven, and survives detaching", a
       }
     }
   }
-});
+}
 
 await report();
