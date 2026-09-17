@@ -10,6 +10,7 @@
  * arrives from the harness, from `--workspace`, or from what the pair already
  * remembered — never from the process working directory.
  */
+import path from "node:path";
 import { newId } from "@agent2llm/core";
 import type { AdapterRegistry } from "@agent2llm/adapter-sdk";
 import {
@@ -93,6 +94,14 @@ export async function resolvePairContext(
   const adapterNote = reported?.note?.trim();
   const adapterSpoke = adapterNote && (resolved.context?.source === "harness" || !resolved.context);
 
+  // When the user named a folder and the harness named a different one, the user
+  // won — and silence about that would hide a disagreement that an hour of
+  // confusion is made of. A wrong folder is the failure that looks like success.
+  const overruled =
+    resolved.context?.source === "user" && reported?.root && path.resolve(reported.root) !== resolved.context.root
+      ? ` The harness reported ${reported.root} instead; leave --workspace off to use that.`
+      : "";
+
   // `resolveContext` does not know where a root came from beyond "an A2L
   // record". When that record is this pair's own memory, say so — "reusing what
   // this pair already knew" is a different sentence from "reading a workspace
@@ -105,9 +114,11 @@ export async function resolvePairContext(
 
   const note = adapterSpoke
     ? `${askNote}${adapterNote}`
-    : fromMemory
-      ? `${askNote}Reusing this pair's stored context: ${resolved.context?.root}`
-      : `${askNote}${resolved.note}`;
+    : overruled
+      ? `${askNote}${resolved.note}${overruled}`
+      : fromMemory
+        ? `${askNote}Reusing this pair's stored context: ${resolved.context?.root}`
+        : `${askNote}${resolved.note}`;
   return { context: resolved.context, note };
 }
 

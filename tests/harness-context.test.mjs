@@ -65,22 +65,40 @@ test("harness-context", "legacy brain-hands keeps Agent2LLM's workspace record f
   assertEqual(resolution.context.root, path.resolve("D:\\dev\\agent2llm"), "the legacy root is used");
 });
 
-test("harness-context", "the user's folder outranks Agent2LLM's record but not the harness", () => {
+test("harness-context", "a folder the user names wins over everything, in every mode", () => {
+  // This expectation was the other way round until an end-to-end run caught it.
+  // `--workspace` is not the user answering a question the harness already
+  // answered; it is the user overriding the default, and the default was
+  // beating it. The symptom was silent and expensive: with Codex's last session
+  // in D:\Chat2Blend, `a2l run "..." --workspace D:\my-repo` would have edited
+  // D:\Chat2Blend and reported success. Only a flag typed on *this* command
+  // reaches this branch, so nothing can be overridden by accident.
   const relay = resolveContext({
     reported: { root: "D:\\projects\\my-game" },
     userRoot: "D:\\projects\\other",
     fallbackRoot: "D:\\dev\\agent2llm",
     mode: "harness-owned",
   });
-  assertEqual(relay.context.source, "harness", "relay: the harness still wins over a chosen folder");
+  assertEqual(relay.context.source, "user", "relay: a named folder outranks the harness");
+  assertEqual(relay.context.root, path.resolve("D:\\projects\\other"), "and it is the one that is used");
 
-  const noHarness = resolveContext({
-    reported: null,
+  const legacy = resolveContext({
+    reported: { root: "D:\\projects\\my-game" },
     userRoot: "D:\\projects\\other",
+    fallbackRoot: "D:\\dev\\agent2llm",
+    mode: "a2l-workspace",
+  });
+  assertEqual(legacy.context.source, "a2l", "legacy still keeps Agent2LLM's workspace record first");
+  assertEqual(legacy.context.root, path.resolve("D:\\dev\\agent2llm"), "which is the record it was built for");
+});
+
+test("harness-context", "with nothing named, the harness still answers", () => {
+  const resolution = resolveContext({
+    reported: { root: "D:\\projects\\my-game" },
     fallbackRoot: "D:\\dev\\agent2llm",
     mode: "harness-owned",
   });
-  assertEqual(noHarness.context.source, "user", "with no harness answer the user's choice is used");
+  assertEqual(resolution.context.source, "harness", "the whole point: no question is asked");
 });
 
 test("harness-context", "context id is the resolved root, so a pair is per-project", () => {

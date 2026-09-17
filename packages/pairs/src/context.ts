@@ -49,13 +49,14 @@ export interface ContextResolutionInput {
   reported: ReportedContext | null;
   /**
    * A root Agent2LLM already knows about (a workspace record, a `--workspace`
-   * flag). Used only when the Harness said nothing.
+   * flag from a previous run, the pair's own memory). Used only when nothing
+   * more specific applies.
    */
   fallbackRoot?: string | undefined;
-  /** A folder the human explicitly chose. Outranks the A2L fallback. */
+  /** A folder the human named on this command. Wins outright. */
   userRoot?: string | undefined;
   /**
-   * `harness-owned` (relay default) trusts the Harness first;
+   * `harness-owned` (relay default) trusts the Harness over Agent2LLM's record;
    * `a2l-workspace` (legacy brain-hands) keeps Agent2LLM's record first.
    */
   mode: ContextMode;
@@ -97,9 +98,16 @@ export function resolveContext(input: ContextResolutionInput): ContextResolution
   const fromUser = input.userRoot ? contextFromRoot({ root: input.userRoot, source: "user" }) : null;
   const fromA2L = input.fallbackRoot ? contextFromRoot({ root: input.fallbackRoot, source: "a2l" }) : null;
 
+  // A folder the user named wins in both modes, and that is a correction rather
+  // than a detail. `--workspace` is not the user *answering a question* the
+  // harness already answered — it is the user overriding the default, and the
+  // default had been beating it. The failure was silent: Codex's last session
+  // was in D:\Chat2Blend, so `a2l run "..." --workspace D:\my-repo` edited
+  // D:\Chat2Blend while reporting success. Only an explicitly typed flag reaches
+  // this branch, so there is no accidental override to protect against.
   const ordered =
     input.mode === "harness-owned"
-      ? [fromHarness, fromUser, fromA2L]
+      ? [fromUser, fromHarness, fromA2L]
       : [fromA2L, fromUser, fromHarness];
 
   const chosen = ordered.find((candidate): candidate is HarnessContext => candidate !== null);
