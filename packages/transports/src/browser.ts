@@ -84,8 +84,23 @@ export interface BrowserCapabilityProbe {
  * threw a ReferenceError that this try/catch swallowed, so the probe answered
  * `installed:false` even with Playwright fully installed — and every Web Brain
  * silently fell back to the manual transport.
+ *
+ * The base URL is wrapped in try/catch because the SEA executable bundles
+ * this file as CommonJS, where esbuild empties `import.meta` and
+ * `createRequire(undefined)` would throw at module load — taking the whole
+ * CLI down before a single command runs. Falling back to the executable
+ * itself means resolving playwright from there can only fail, so the probe
+ * answers `installed:false`, which is exactly what an executable without
+ * node_modules should report (the CDP attach path needs no playwright and
+ * keeps working).
  */
-const requireFromTransports = createRequire(import.meta.url);
+const requireFromTransports: NodeRequire = (() => {
+  try {
+    return createRequire(import.meta.url);
+  } catch {
+    return createRequire(process.execPath);
+  }
+})();
 
 export function probeBrowserModule(moduleName = "playwright"): BrowserCapabilityProbe {
   try {
