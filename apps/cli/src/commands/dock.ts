@@ -42,30 +42,31 @@
  *
  * Concurrent runs are refused with 409 rather than queued: two harnesses
  * editing one working tree is a corruption, not a queue.
+ *
+ * The serialisation helpers and the page-shape whitelists live in
+ * `dock-http.ts`; the state-changing POST handlers live beside the routes
+ * they serve.
  */
 import http from "node:http";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { AdapterRegistry, UserActionRequest } from "@agent2llm/adapter-sdk";
-import type { Pair, RunRecord } from "@agent2llm/pairs";
 import { CLI_VERSION } from "@agent2llm/config";
 import { pairsStore, runsStore } from "./pair-select.js";
 import { runRelayGoal } from "./relay-goal.js";
 import { renderDockPage } from "@agent2llm/dock";
+import {
+  DOCK_HOST,
+  gatePost,
+  html,
+  json,
+  pairsForPage,
+  readBody,
+  runsForPage,
+  tokenMatches,
+} from "./dock-http.js";
 import * as ui from "../ui.js";
 
-/**
- * The only address the dock binds.
- *
- * Exported because the test asserts it rather than trusting the literal: a
- * future refactor that made this configurable would be a security change, and
- * the test should be the thing that notices.
- */
-export const DOCK_HOST = "127.0.0.1";
-
-/** Body ceiling. A goal is a sentence; anything larger is not a goal. */
-const MAX_BODY_BYTES = 64 * 1024;
-/** How many runs the state payload carries back to the page. */
-const RUN_HISTORY = 20;
+export { DOCK_HOST };
 
 export interface DockOptions {
   port?: number;
@@ -88,78 +89,6 @@ interface RunState {
   events: string[];
   /** Harness approval requests the dock could not answer. */
   pending: string[];
-}
-
-function json(res: http.ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body);
-  res.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "content-length": Buffer.byteLength(payload),
-    "cache-control": "no-store",
-    "x-content-type-options": "nosniff",
-  });
-  res.end(payload);
-}
-
-function html(res: http.ServerResponse, status: number, body: string): void {
-  res.writeHead(status, {
-    "content-type": "text/html; charset=utf-8",
-    "content-length": Buffer.byteLength(body),
-    "cache-control": "no-store",
-    "x-content-type-options": "nosniff",
-    // A page that can start processes should not be frameable by another site.
-    "x-frame-options": "DENY",
-    "referrer-policy": "no-referrer",
-  });
-  res.end(body);
-}
-
-/** Constant-time token check; a length mismatch cannot leak through `timingSafeEqual`. */
-function tokenMatches(supplied: string | null, expected: string): boolean {
-  if (!supplied) return false;
-  const a = Buffer.from(supplied);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
-/** The recent-run view: enough for a list, and no receipts. */
-function runsForPage(runs: RunRecord[]): unknown[] {
-  return [...runs]
-    .sort((left, right) => (left.startedAt < right.startedAt ? 1 : -1))
-    .slice(0, RUN_HISTORY)
-    .map((run) => ({
-      runId: run.runId,
-      pairId: run.pairId,
-      goal: run.goal,
-      status: run.status,
-      startedAt: run.startedAt,
-      finishedAt: run.finishedAt,
-      iterations: run.iterations,
-    }));
-}
-
-function pairsForPage(pairs: Pair[]): unknown[] {
-  return pairs.map((pair) => ({
-    pairId: pair.pairId,
-    label: pair.label,
-    brainAdapterId: pair.brainAdapterId,
-    harnessAdapterId: pair.harnessAdapterId,
-    context: pair.context ? { root: pair.context.root, source: pair.context.source } : null,
-    contextMode: pair.contextMode,
-    executionPolicy: { mode: pair.executionPolicy.mode },
-    lastRunAt: pair.lastRunAt,
-  }));
-}
-
-async function readBody(req: http.IncomingMessage): Promise<string> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) throw new Error("Request body is larger than this dock accepts.");
-    chunks.push(chunk as Buffer);
-  }
-  return Buffer.concat(chunks).toString("utf8");
 }
 
 /**
@@ -213,18 +142,7 @@ export async function startDock(registry: AdapterRegistry, options: DockOptions 
   }
 
   async function handleRun(req: http.IncomingMessage, res: http.ServerResponse, port: number): Promise<void> {
-    // A browser sends Origin on cross-origin POSTs. Same-origin requests from
-    // our own page send it too, so it is compared rather than required.
-    const origin = req.headers.origin;
-    if (origin && origin !== `http://${DOCK_HOST}:${port}` && origin !== `http://localhost:${port}`) {
-      json(res, 403, { error: "Cross-origin requests are refused." });
-      return;
-    }
-    const contentType = (req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
-    if (contentType !== "application/json") {
-      json(res, 415, { error: "A run must be posted as application/json." });
-      return;
-    }
+    if (!gatePost(req, res, port, "run")) return;
     if (state.busy) {
       json(res, 409, { error: "A run is already in progress. Two harnesses in one working tree is a corruption." });
       return;
