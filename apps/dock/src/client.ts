@@ -71,6 +71,23 @@ interface DockState {
   runs: RunView[];
 }
 
+interface CatalogAdapter {
+  id: string;
+  name: string;
+  role: string;
+  experimental: boolean;
+}
+
+interface CatalogView {
+  adapters: CatalogAdapter[];
+}
+
+interface CreatePairResult {
+  pair: PairView;
+  created: boolean;
+  contextNote: string;
+}
+
 interface RunResult {
   status: string;
   summary: string;
@@ -100,7 +117,7 @@ function render(state: DockState): void {
   const host = byId("pairs");
   host.innerHTML = state.pairs.length
     ? state.pairs.map(pairCard).join("")
-    : `<div class="card empty">No pairs yet. Create one with <code>${esc(createCommand)}</code>.</div>`;
+    : `<div class="card empty">No pairs yet. Create one below, or with <code>${esc(createCommand)}</code>.</div>`;
 
   const runs = byId("runs");
   runs.className = state.runs.length ? "" : "empty";
@@ -119,9 +136,39 @@ function render(state: DockState): void {
     : "No runs yet.";
 }
 
+/** The creation form: two selects drawn from the real registry, nothing invented. */
+function renderCreateForm(catalog: CatalogView): void {
+  const host = byId("newpair");
+  const brains = catalog.adapters.filter((adapter) => adapter.role === "brain");
+  const harnesses = catalog.adapters.filter((adapter) => adapter.role === "harness");
+  if (brains.length === 0 || harnesses.length === 0) {
+    host.className = "empty";
+    host.textContent = "This CLI has no registered adapters to join, so a pair cannot be made here. Run a2l adapters to see what it has.";
+    return;
+  }
+  const options = (list: CatalogAdapter[]) =>
+    list
+      .map(
+        (adapter) =>
+          `<option value="${esc(adapter.id)}">${esc(adapter.name || adapter.id)}${
+            adapter.experimental ? " (experimental)" : ""
+          }</option>`
+      )
+      .join("");
+  host.className = "";
+  host.innerHTML =
+    `<div class="row"><select data-brain aria-label="Brain">${options(brains)}</select>` +
+    `<span class="meta">&times;</span>` +
+    `<select data-harness aria-label="Harness">${options(harnesses)}</select></div>` +
+    `<div class="row"><input type="text" data-workspace placeholder="Workspace folder (optional)"></div>` +
+    `<div class="row"><button data-create>Create pair</button><span class="meta" data-create-out></span></div>`;
+}
+
 async function boot(): Promise<void> {
   try {
-    render(await api<DockState>("/api/state"));
+    const [state, catalog] = await Promise.all([api<DockState>("/api/state"), api<CatalogView>("/api/catalog")]);
+    render(state);
+    renderCreateForm(catalog);
   } catch (error) {
     byId("pairs").innerHTML =
       '<div class="card error">Could not load state: ' +
@@ -130,7 +177,37 @@ async function boot(): Promise<void> {
   }
 }
 
+/** Makes the pair through the same server path as `a2l pair create`. */
+async function createPair(button: HTMLButtonElement): Promise<void> {
+  const card = button.closest(".card");
+  if (!card) return;
+  const brain = (card.querySelector("[data-brain]") as HTMLSelectElement).value;
+  const harness = (card.querySelector("[data-harness]") as HTMLSelectElement).value;
+  const workspace = (card.querySelector("[data-workspace]") as HTMLInputElement).value.trim();
+  const out = card.querySelector<HTMLElement>("[data-create-out]");
+  if (!out) return;
+  const body: Record<string, string> = { brain, harness };
+  if (workspace) body.workspace = workspace;
+  button.disabled = true;
+  out.textContent = "Creating…";
+  try {
+    const result = await api<CreatePairResult>("/api/pairs", { method: "POST", body: JSON.stringify(body) });
+    out.textContent =
+      (result.created ? "Created " : "Reusing ") + result.pair.pairId + " — " + result.contextNote;
+    void boot();
+  } catch (error) {
+    out.textContent = "Failed: " + (error as Error).message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 document.addEventListener("click", async (event) => {
+  const createButton = (event.target as Element | null)?.closest("[data-create]");
+  if (createButton) {
+    await createPair(createButton as HTMLButtonElement);
+    return;
+  }
   const button = (event.target as Element | null)?.closest("[data-run]");
   if (!button) return;
   const card = button.closest("[data-pair]");

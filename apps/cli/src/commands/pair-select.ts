@@ -181,6 +181,92 @@ export function ensurePair(
   return pairs.save(input.context ? { ...created, context: input.context } : created);
 }
 
+// ---- Create-or-reuse, shared by the CLI and the dock ------------------------
+
+export type CreatePairOutcome =
+  | { ok: true; pair: Pair; created: boolean; note: string }
+  | { ok: false; error: string };
+
+/**
+ * Create a Pair, or hand back the one that already exists.
+ *
+ * Extracted from `runPairCreate` so the dock's creation endpoint goes through
+ * exactly the same decisions as the command: which side is which, which
+ * context wins, and when an existing pair is a *continuation* rather than a
+ * duplicate. Nothing here prints and nothing here exits — the CLI renders the
+ * outcome, the dock serialises it, and both get the same sentences on failure.
+ */
+export async function createPairCore(
+  registry: AdapterRegistry,
+  input: {
+    brain?: string | undefined;
+    harness?: string | undefined;
+    workspace?: string | undefined;
+    label?: string | undefined;
+    contextMode?: string | undefined;
+  }
+): Promise<CreatePairOutcome> {
+  if (!input.brain || !input.harness) {
+    return { ok: false, error: "A pair needs both sides: --brain <id> and --harness <id>." };
+  }
+  const wanted = [
+    { flag: "--brain", id: input.brain, role: "brain" as const },
+    { flag: "--harness", id: input.harness, role: "harness" as const },
+  ];
+  for (const side of wanted) {
+    const actual = roleOf(registry, side.id);
+    if (actual === null) {
+      return {
+        ok: false,
+        error: `Unknown adapter '${side.id}'. Run 'a2l adapters' to see what is registered.`,
+      };
+    }
+    // Naming the flag that is wrong is the difference between a typo and a
+    // mystery: `--harness chatgpt-web` is a small mistake with a large symptom.
+    if (actual !== side.role) {
+      return {
+        ok: false,
+        error: `'${side.id}' is a ${actual}, not a ${side.role}. ${side.flag} needs a ${side.role} id.`,
+      };
+    }
+  }
+
+  const mode = parseMode(input.contextMode);
+  if (mode === null) {
+    return { ok: false, error: `--context-mode must be one of: ${CONTEXT_MODES.join(", ")}.` };
+  }
+
+  const { context, note } = await resolvePairContext(registry, {
+    harnessId: input.harness,
+    workspace: input.workspace,
+    mode,
+  });
+
+  const existing = findPairByIdentity(pairsStore(), {
+    brainAdapterId: input.brain,
+    harnessAdapterId: input.harness,
+    context,
+  });
+  if (existing) {
+    // The probe failing is worth reporting, but it must not read as "this pair
+    // lost its folder": the stored context is still what a run falls back to.
+    const noteText =
+      !context && existing.context?.root
+        ? `Kept this pair's stored context: ${existing.context.root}. ${note}`
+        : note;
+    return { ok: true, pair: existing, created: false, note: noteText };
+  }
+
+  const pair = ensurePair(pairsStore(), {
+    brainAdapterId: input.brain,
+    harnessAdapterId: input.harness,
+    context,
+    contextMode: mode,
+    ...(input.label ? { label: input.label } : {}),
+  });
+  return { ok: true, pair, created: true, note };
+}
+
 /** Picks a pair from whatever the user named: an id, adapters, or nothing. */
 export function selectPair(
   pairs: PairStore,

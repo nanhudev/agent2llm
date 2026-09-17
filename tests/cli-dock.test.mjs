@@ -183,6 +183,75 @@ test("cli-dock", "state lists pairs and runs without shipping receipts", async (
   assertEqual(body.busy, false, "nothing is running yet");
 });
 
+test("cli-dock", "the catalog lists what can actually be joined, and is token-gated", async () => {
+  const { info } = await ensureDock();
+  const base = `http://${info.host}:${info.port}`;
+
+  const gated = await fetch(`${base}/api/catalog`);
+  assertEqual(gated.status, 401, "the catalog is a route like any other: no token, no answer");
+
+  const body = await (await fetch(`${base}/api/catalog?token=${info.token}`)).json();
+  const ids = body.adapters.map((adapter) => adapter.id);
+  assert(ids.includes("mock-brain"), `the registered brains are offered: ${ids.join(", ")}`);
+  assert(ids.includes("mock-harness"), "and the registered harnesses");
+  const brain = body.adapters.find((adapter) => adapter.id === "mock-brain");
+  assertEqual(brain.role, "brain", "each entry carries its role, so a form cannot cross the sides");
+});
+
+test("cli-dock", "a pair can be created from the page, through the pair-create path", async () => {
+  const { info } = await ensureDock();
+  const url = `http://${info.host}:${info.port}/api/pairs?token=${info.token}`;
+  const post = (body, extra = {}) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...extra },
+      body: JSON.stringify(body),
+    });
+
+  const form = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "brain=mock-brain&harness=mock-harness",
+  });
+  assertEqual(form.status, 415, "a form post is refused here too");
+  const cross = await post({ brain: "mock-brain", harness: "mock-harness" }, { origin: "https://example.com" });
+  assertEqual(cross.status, 403, "and so is another origin");
+
+  const crossed = await post({ brain: "mock-harness", harness: "mock-brain" });
+  assertEqual(crossed.status, 400, "the sides cannot be crossed");
+  const crossedBody = await crossed.json();
+  assert(
+    /is a harness, not a brain/.test(crossedBody.error),
+    `the error names the mistake: ${crossedBody.error}`
+  );
+  const unknown = await post({ brain: "no-such-brain", harness: "mock-harness" });
+  assertEqual(unknown.status, 400, "an unknown adapter is refused, named");
+
+  // Unique per run: the runner gives this file a private state directory, but
+  // a bare `node tests/cli-dock.test.mjs` reuses the repo-root one, and a pair
+  // left there by the last run must not turn this create into a reuse.
+  const workspace = path.join(STATE, `dock-made-${Date.now()}`);
+  fs.mkdirSync(workspace, { recursive: true });
+  const made = await post({ brain: "mock-brain", harness: "mock-harness", workspace });
+  const madeBody = await made.json();
+  assertEqual(made.status, 200, `creation succeeds: ${JSON.stringify(madeBody)}`);
+  assertEqual(madeBody.created, true, "a fresh pair is reported as created");
+  assertEqual(madeBody.pair.brainAdapterId, "mock-brain", "with the brain it asked for");
+  assertEqual(madeBody.pair.harnessAdapterId, "mock-harness", "and the harness");
+  assertEqual(madeBody.pair.context.root, workspace, "and the workspace it was given");
+
+  const again = await post({ brain: "mock-brain", harness: "mock-harness", workspace });
+  const againBody = await again.json();
+  assertEqual(againBody.created, false, "the same request again is a continuation, not a fork");
+  assertEqual(againBody.pair.pairId, madeBody.pair.pairId, "and it is the same pair");
+
+  const after = await (await fetch(`http://${info.host}:${info.port}/api/state?token=${info.token}`)).json();
+  assert(
+    after.pairs.some((pair) => pair.pairId === madeBody.pair.pairId),
+    "the pair appears in the state the page renders"
+  );
+});
+
 test("cli-dock", "a run posted as a form is refused before it is read", async () => {
   const { info } = await ensureDock();
   // This is the shape a cross-site form post takes, and it is why the content

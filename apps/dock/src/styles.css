@@ -18,6 +18,8 @@
   .row { display:flex; gap:8px; margin-top:14px; }
   input[type=text] { flex:1; padding:9px 11px; border:1px solid var(--line); border-radius:7px;
                      background:var(--bg); color:var(--fg); font:inherit; }
+  select { padding:9px 11px; border:1px solid var(--line); border-radius:7px;
+           background:var(--bg); color:var(--fg); font:inherit; }
   button { padding:9px 16px; border:1px solid transparent; border-radius:7px; cursor:pointer;
            background:var(--accent); color:#fff; font:inherit; font-weight:600; }
   button[disabled] { opacity:.55; cursor:default; }

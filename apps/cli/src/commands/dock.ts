@@ -53,6 +53,7 @@ import type { AdapterRegistry, UserActionRequest } from "@agent2llm/adapter-sdk"
 import { CLI_VERSION } from "@agent2llm/config";
 import { pairsStore, runsStore } from "./pair-select.js";
 import { runRelayGoal } from "./relay-goal.js";
+import { handleCreatePair } from "./dock-pairs.js";
 import { renderDockPage } from "@agent2llm/dock";
 import {
   DOCK_HOST,
@@ -133,8 +134,20 @@ export async function startDock(registry: AdapterRegistry, options: DockOptions 
       return;
     }
 
+    // What the creation form offers: every registered adapter, with its role,
+    // so the page cannot invent an id that does not exist.
+    if (req.method === "GET" && url.pathname === "/api/catalog") {
+      json(res, 200, { adapters: registry.descriptors() });
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/run") {
       await handleRun(req, res, port);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/pairs") {
+      await handleCreatePair(registry, { ...(options.workspace ? { workspace: options.workspace } : {}) }, req, res, port);
       return;
     }
 

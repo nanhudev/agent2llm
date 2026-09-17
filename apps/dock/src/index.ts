@@ -74,6 +74,11 @@ ${DOCK_CSS}</style>
   <div id="pairs"></div>
 
   <div class="card">
+    <h2>New pair</h2>
+    <div id="newpair" class="empty">Loading…</div>
+  </div>
+
+  <div class="card">
     <h2>Recent runs</h2>
     <div id="runs" class="empty">Loading…</div>
   </div>

@@ -16,17 +16,8 @@
  * all, which lists. The two meanings are kept apart in `index.ts`.
  */
 import type { AdapterRegistry } from "@agent2llm/adapter-sdk";
-import { CONTEXT_MODES } from "@agent2llm/pairs";
 import { CLI_PRIMARY_NAME } from "@agent2llm/config";
-import {
-  ensurePair,
-  findPairByIdentity,
-  parseMode,
-  pairsStore,
-  resolvePairContext,
-  roleOf,
-  runsStore,
-} from "./pair-select.js";
+import { createPairCore, pairsStore, runsStore } from "./pair-select.js";
 import * as ui from "../ui.js";
 
 export interface PairOptions {
@@ -79,75 +70,33 @@ export async function runPairList(options: { json?: boolean } = {}): Promise<num
 }
 
 export async function runPairCreate(registry: AdapterRegistry, options: PairOptions): Promise<number> {
-  if (!options.brain || !options.harness) {
-    ui.fail("A pair needs both sides: --brain <id> and --harness <id>.");
-    return 2;
-  }
-  const wanted = [
-    { flag: "--brain", id: options.brain, role: "brain" as const },
-    { flag: "--harness", id: options.harness, role: "harness" as const },
-  ];
-  for (const side of wanted) {
-    const actual = roleOf(registry, side.id);
-    if (actual === null) {
-      ui.fail(`Unknown adapter '${side.id}'. Run 'a2l adapters' to see what is registered.`);
-      return 2;
-    }
-    // Naming the flag that is wrong is the difference between a typo and a
-    // mystery: `--harness chatgpt-web` is a small mistake with a large symptom.
-    if (actual !== side.role) {
-      ui.fail(`'${side.id}' is a ${actual}, not a ${side.role}. ${side.flag} needs a ${side.role} id.`);
-      return 2;
-    }
-  }
-
-  const mode = parseMode(options.contextMode);
-  if (mode === null) {
-    ui.fail(`--context-mode must be one of: ${CONTEXT_MODES.join(", ")}.`);
-    return 2;
-  }
-
-  const { context, note } = await resolvePairContext(registry, {
-    harnessId: options.harness,
+  // The decisions live in `createPairCore` (pair-select.ts), shared with the
+  // dock's creation endpoint; this command is the rendering of the outcome.
+  const outcome = await createPairCore(registry, {
+    brain: options.brain,
+    harness: options.harness,
     workspace: options.workspace,
-    mode,
+    label: options.label,
+    contextMode: options.contextMode,
   });
-
-  const existing = findPairByIdentity(pairsStore(), {
-    brainAdapterId: options.brain,
-    harnessAdapterId: options.harness,
-    context,
-  });
-  if (existing) {
-    // The probe failing is worth reporting, but it must not read as "this pair
-    // lost its folder": the stored context is still what a run falls back to.
-    const noteText =
-      !context && existing.context?.root
-        ? `Kept this pair's stored context: ${existing.context.root}. ${note}`
-        : note;
-    if (options.json) {
-      ui.jsonOutput({ pair: existing, created: false, contextNote: noteText });
-      return 0;
-    }
-    ui.line(
-      `  ${ui.cyan("Reusing")} pair ${existing.pairId} — this brain and harness already share a conversation here.`
-    );
-    ui.line(ui.dim(`  ${noteText}`));
-    return 0;
+  if (!outcome.ok) {
+    ui.fail(outcome.error);
+    return 2;
   }
 
-  const pair = ensurePair(pairsStore(), {
-    brainAdapterId: options.brain,
-    harnessAdapterId: options.harness,
-    context,
-    contextMode: mode,
-    ...(options.label ? { label: options.label } : {}),
-  });
-
+  const { pair, created, note } = outcome;
   if (options.json) {
-    ui.jsonOutput({ pair, created: true, contextNote: note });
+    ui.jsonOutput({ pair, created, contextNote: note });
     return 0;
   }
+  if (!created) {
+    ui.line(
+      `  ${ui.cyan("Reusing")} pair ${pair.pairId} — this brain and harness already share a conversation here.`
+    );
+    ui.line(ui.dim(`  ${note}`));
+    return 0;
+  }
+
   ui.heading("Pair created");
   ui.line(`  ${pair.brainAdapterId} × ${pair.harnessAdapterId}`);
   ui.line(`  context: ${pair.context?.root ?? "(none yet)"}`);
