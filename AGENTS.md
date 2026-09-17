@@ -104,6 +104,29 @@ agent2llm setup --brain <brain> --harness <harness>
   three are never mixed, and an estimate must never be restated as a token
   count. Use the output instead of guessing.
 
+## Contributing to this repository
+
+Operational rules for how changes are recorded. They are few and absolute:
+
+- **No phase or delivery report files.** `FINAL_REPORT.md`,
+  `PHASE_COMPLETE.md`, `IMPLEMENTATION_SUMMARY.md` and friends must not be
+  created. Canonical history is git commits, `CHANGELOG.md`, tests and source;
+  a claim that lives in none of those does not exist.
+- **`CHANGELOG.md` is for product changes**, added under `## [Unreleased]`
+  when the change lands — never pre-written for work that has not happened.
+- **Tests are the proof.** A behavior change without a test that fails without
+  it is not done. `npm run verify` and `npm test` green is the minimum bar for
+  saying a change works.
+- **Never claim a provider or harness succeeded without a real execution
+  against it.** A mocked, skipped or unavailable run is reported as blocked,
+  with the reason — a mock behind a real-looking harness name is a lie.
+- **Never convert an unmeasured quantity into a number.** Unknown stays
+  unknown (`unavailable` with a reason); an estimate stays labelled as an
+  estimate; `0` means a provider reported zero.
+- **`README.md` / `README.zh-CN.md` are human-owned.** Do not edit, rewrite or
+  "improve" them; install exactly the text the human supplies, and stop and
+  report if a supplied claim contradicts the code.
+
 ## If something fails
 
 - `agent2llm doctor` output is the bug report. Include it.
