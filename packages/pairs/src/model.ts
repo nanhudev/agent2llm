@@ -148,8 +148,9 @@ export const runMetricsSchema = z.object({
   harnessResponse: textSizeSchema.default({ bytes: 0, estimatedTextTokens: 0 }),
   evidenceRaw: textSizeSchema.default({ bytes: 0, estimatedTextTokens: 0 }),
   evidenceCompact: textSizeSchema.default({ bytes: 0, estimatedTextTokens: 0 }),
-  /** Sums of the per-turn values the Brain adapter reported. */
+  /** Text Agent2LLM sent the Brain, measured on the wire form. */
   brainPrompt: textSizeSchema.default({ bytes: 0, estimatedTextTokens: 0 }),
+  /** Text the Brain returned, measured the same way. */
   brainResponse: textSizeSchema.default({ bytes: 0, estimatedTextTokens: 0 }),
   elapsedMs: z.number().int().nonnegative().default(0),
 });

@@ -5,6 +5,7 @@
 import {
   A2L_STATES,
   canTransition,
+  nextSpeaker,
   createControlMessage,
   parseControlMessage,
   validateTransition,
@@ -20,6 +21,7 @@ import {
   c2cRecordToA2LExecuted,
 } from "@agent2llm/protocol";
 import { test, assert, assertEqual, assertThrows } from "@agent2llm/testing";
+import { A2L_MUTABLE_STATES as A2L_MUTABLE_STATES_OF_PROTOCOL } from "@agent2llm/protocol";
 import { SAMPLE_CONTROL_BLOCKS, CHAT_REPLY_WITH_PROSE } from "@agent2llm/fixtures";
 import { report } from "./_report.mjs";
 
@@ -32,8 +34,66 @@ const BASE = {
 };
 
 test("protocol", "every state is reachable and finite", () => {
-  assertEqual(A2L_STATES.length, 14, "state count changed; update the docs and tests");
+  assertEqual(A2L_STATES.length, 16, "state count changed; update the docs and tests");
   assert(new Set(A2L_STATES).size === A2L_STATES.length, "states must be unique");
+});
+
+/**
+ * Relay Mode added NEXT_ACTION, and adding a state is a protocol change: it
+ * has to be reachable, it has to lead somewhere, and it must not become a
+ * second way to express a plan that already exists.
+ */
+test("protocol", "NEXT_ACTION fits the machine without replacing PLAN", () => {
+  assert(A2L_STATES.includes("NEXT_ACTION"), "the state is part of the protocol");
+  assert(canTransition("INIT", "NEXT_ACTION"), "a relay Brain may answer INIT with a step");
+  assert(canTransition("EXECUTED", "NEXT_ACTION"), "and may answer evidence with the next step");
+  assert(canTransition("EXECUTED", "DONE"), "or answer it with a verdict, without a REVIEWING detour");
+  assert(canTransition("EXECUTED", "REVISE"), "including a revision");
+  assert(canTransition("NEXT_ACTION", "DISPATCHED"), "a step is what gets dispatched");
+  assert(!canTransition("NEXT_ACTION", "EXECUTED"), "a step cannot skip its own execution");
+  assertEqual(nextSpeaker("NEXT_ACTION"), "core", "the core dispatches, the Brain does not");
+  assert(canTransition("INIT", "PLAN"), "PLAN is still reachable; old workflows are unchanged");
+});
+
+/**
+ * The Brain may ask to see one file's diff instead of judging from a line
+ * count. That answer has to be a state of its own: it is not an execution, and
+ * the state machine is where "nothing was executed" is enforced.
+ */
+test("protocol", "EVIDENCE_DETAIL answers a detail request without executing", () => {
+  assert(canTransition("NEXT_ACTION", "EVIDENCE_DETAIL"), "a step may be answered with the detail it asked for");
+  assert(canTransition("EVIDENCE_DETAIL", "NEXT_ACTION"), "and the Brain then names a step");
+  assert(canTransition("EVIDENCE_DETAIL", "DONE"), "or decides the run is finished");
+  assertEqual(nextSpeaker("EVIDENCE_DETAIL"), "brain", "the core supplies detail, the Brain judges it");
+  assert(
+    !(A2L_MUTABLE_STATES_OF_PROTOCOL.includes("EVIDENCE_DETAIL")),
+    "reading a diff must never be a workspace-mutation state"
+  );
+  assert(
+    canTransition("NEXT_ACTION", "DISPATCHED") && canTransition("NEXT_ACTION", "EVIDENCE_DETAIL"),
+    "both paths out of NEXT_ACTION stay available"
+  );
+});
+
+test("protocol", "a NEXT_ACTION block round-trips with its acceptance criteria", () => {
+  const message = createControlMessage(
+    "NEXT_ACTION",
+    {
+      task: "Fix Codex discovery so Agent2LLM detects ~/.codex/.sandbox-bin/codex.exe",
+      acceptance: ["agent2llm detect shows Codex", "the real version is reported"],
+      filesLikelyInvolved: ["packages/harnesses/codex/src/index.ts"],
+    },
+    BASE
+  );
+  const parsed = parseControlBlock(encodeControlMessage(message));
+  assert(parsed.ok, `the wire format must carry the new state: ${parsed.ok ? "" : parsed.error}`);
+  assertEqual(parsed.message.type, "NEXT_ACTION", "state survives");
+  assertEqual(parsed.message.payload.acceptance.length, 2, "acceptance criteria survive");
+  assertEqual(
+    parsed.message.payload.filesLikelyInvolved[0],
+    "packages/harnesses/codex/src/index.ts",
+    "the file hint survives"
+  );
 });
 
 test("protocol", "BOOTSTRAP -> READY -> INIT is the only sane opening", () => {
@@ -106,6 +166,33 @@ test("protocol", "wire round-trip preserves typed payloads", () => {
   assert(parsed.ok, `wire parse failed: ${parsed.error ?? ""}`);
   assertEqual(parsed.message.payload.changedFiles.length, 2, "array payload survives");
   assertEqual(parsed.message.iteration, 1, "iteration survives");
+});
+
+/**
+ * An execution that changed nothing is a real outcome — a Relay step that only
+ * inspected the repository produces one — and the text wire format omits empty
+ * arrays. Without a default on `changedFiles` the key disappears and the whole
+ * message fails to parse, which is how a Brain ends up unable to read a control
+ * block Agent2LLM just sent it.
+ */
+test("protocol", "an execution that changed nothing still round-trips", () => {
+  const message = createControlMessage(
+    "EXECUTED",
+    {
+      result: "Inspected the repository; nothing needed to change.",
+      changedFiles: [],
+      tests: null,
+      exitStatus: "ok",
+      commands: [],
+      evidence: "Execution #1",
+    },
+    BASE
+  );
+  const parsed = parseControlBlock(encodeControlMessage(message));
+  assert(parsed.ok, `an empty change list must survive the wire: ${parsed.ok ? "" : parsed.error}`);
+  assertEqual(parsed.message.type, "EXECUTED", "the state survives");
+  assertEqual(parsed.message.payload.changedFiles.length, 0, "and no files comes back as no files, not an error");
+  assertEqual(parsed.message.payload.evidence, "Execution #1", "the evidence travels with it");
 });
 
 test("protocol", "control messages stay inside the web budget", () => {

@@ -22,6 +22,8 @@ import {
 
 export type MockScriptStep =
   | { type: "INSPECTING"; focus?: string }
+  /** Relay Mode: one executable step plus how it will be judged. */
+  | { type: "NEXT_ACTION"; task: string; acceptance?: string[]; files?: string[] }
   | { type: "PLAN"; actions: string[]; rationale?: string; successCriteria?: string; files?: string[] }
   | { type: "REVIEWING"; focus?: string }
   | { type: "DONE"; summary: string }
@@ -131,6 +133,16 @@ export class MockBrainAdapter extends BaseBrainAdapter {
 
   async sendControl(session: BrainSession, message: ControlMessage): Promise<void> {
     const state = this.require(session);
+    // A real Brain answers in the identity of the message it just read. Caching
+    // these at create time made the mock the only Brain that could not follow a
+    // relay Pair across two runs: the conversation is reused, the task id is
+    // not, and a reply quoting the previous run's task would be a protocol
+    // violation rather than a continuation.
+    state.context = {
+      sessionId: message.sessionId,
+      taskId: message.taskId,
+      workspaceId: message.workspaceId,
+    };
     state.sent.push(message);
     // Round-trip through the wire format so the mock exercises the real parser.
     const reparsed = parseControlBlock(encodeControlMessage(message));
@@ -196,6 +208,12 @@ export class MockBrainAdapter extends BaseBrainAdapter {
             tests: "",
             successCriteria: step.successCriteria ?? "",
           },
+          base
+        );
+      case "NEXT_ACTION":
+        return createControlMessage(
+          "NEXT_ACTION",
+          { task: step.task, acceptance: step.acceptance ?? [], filesLikelyInvolved: step.files ?? [] },
           base
         );
       case "REVIEWING":

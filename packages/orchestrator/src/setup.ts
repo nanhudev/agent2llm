@@ -9,7 +9,7 @@ import type { BrainAdapter, HarnessAdapter } from "@agent2llm/adapter-sdk";
 import { createSession, type CollaborationSession, type SessionStore } from "@agent2llm/session";
 import { newSessionId, newTaskId } from "@agent2llm/core";
 import type { Logger } from "@agent2llm/logger";
-import type { RunOptions } from "./runner.js";
+import type { RunOptions } from "./runner-types.js";
 
 export interface Preflight {
   workflowId: string;

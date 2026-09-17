@@ -23,6 +23,9 @@
     "@agent2llm/logger": "*",
     "@agent2llm/protocol": "*",
     "@agent2llm/session": "*",
-    "@agent2llm/workspace": "*"
+    "@agent2llm/workspace": "*",
+    "@agent2llm/evidence": "*",
+    "@agent2llm/metrics": "*",
+    "@agent2llm/pairs": "*"
   }
 }

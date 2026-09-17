@@ -5,9 +5,7 @@
  * Kept separate from the orchestration loop so the loop stays about protocol
  * transitions and this stays about process evidence.
  */
-import { appendExecutionRecord } from "@agent2llm/execution";
-import { changedSinceLastSnapshot, type Workspace } from "@agent2llm/workspace";
-import type { HarnessAdapter, HarnessSession, UserActionRequest } from "@agent2llm/adapter-sdk";
+import type { ExecutionRequest, HarnessAdapter, HarnessSession, UserActionRequest } from "@agent2llm/adapter-sdk";
 import type { Logger } from "@agent2llm/logger";
 
 export interface ExecutionOutcome {
@@ -17,20 +15,22 @@ export interface ExecutionOutcome {
   tests: string | null;
   exitStatus: string;
   commands: string[];
+  /** Wall-clock time the harness reported for the execution. */
+  durationMs: number;
 }
 
 export interface IterationInput {
   harness: HarnessAdapter;
   session: HarnessSession;
   adapterId: string;
-  workspaceId: string;
-  workspaceRoot: string;
-  taskId: string;
-  iteration: number;
-  goal: string;
-  instructions: string[];
-  successCriteria?: string;
-  filesLikelyInvolved?: string[];
+  /**
+   * The dispatch, built by the caller.
+   *
+   * Passed in rather than assembled here so that whoever wrote it can also
+   * *measure* it: Relay reports how many bytes it sent the Harness, and a
+   * number produced by a second renderer would be a number about nothing.
+   */
+  request: ExecutionRequest;
   logger: Logger;
   requestUserAction?: (action: UserActionRequest) => Promise<void>;
 }
@@ -42,6 +42,7 @@ const EMPTY_OUTCOME: ExecutionOutcome = {
   tests: null,
   exitStatus: "unknown",
   commands: [],
+  durationMs: 0,
 };
 
 /**
@@ -49,17 +50,7 @@ const EMPTY_OUTCOME: ExecutionOutcome = {
  * execution: a failure is data the Brain must be allowed to review.
  */
 export async function executeIteration(input: IterationInput): Promise<ExecutionOutcome> {
-  const handle = await input.harness.execute(input.session, {
-    taskId: input.taskId,
-    iteration: input.iteration,
-    goal: input.goal,
-    instructions: input.instructions,
-    ...(input.successCriteria ? { successCriteria: input.successCriteria } : {}),
-    ...(input.filesLikelyInvolved && input.filesLikelyInvolved.length > 0
-      ? { filesLikelyInvolved: input.filesLikelyInvolved }
-      : {}),
-    workspaceRoot: input.workspaceRoot,
-  });
+  const handle = await input.harness.execute(input.session, input.request);
 
   let outcome = EMPTY_OUTCOME;
   for await (const event of input.harness.events(handle)) {
@@ -82,6 +73,7 @@ export async function executeIteration(input: IterationInput): Promise<Execution
         tests: event.result.tests ?? null,
         exitStatus: event.result.exitStatus,
         commands: event.result.commands ?? [],
+        durationMs: event.result.durationMs ?? 0,
       };
       continue;
     }
@@ -93,6 +85,7 @@ export async function executeIteration(input: IterationInput): Promise<Execution
         tests: null,
         exitStatus: event.error.code,
         commands: [],
+        durationMs: 0,
       };
     }
   }
@@ -100,35 +93,30 @@ export async function executeIteration(input: IterationInput): Promise<Execution
 }
 
 /**
- * Prefers what the Harness reported, falls back to the local snapshot. The
- * snapshot wins when the Harness reported nothing but files did change, which
- * is exactly the case a silent Harness would otherwise hide.
+ * The pre-relay dispatch, built in one place.
+ *
+ * It lives beside `executeIteration` because it is the same decision: this is
+ * the request whose `renderStandardBrief` every brain-hands step has always
+ * sent. Relay is the mode that added a second shape, not a change to this one.
  */
-export function resolveChangedFiles(workspace: Workspace, outcome: ExecutionOutcome): number | string[] {
-  const reported = outcome.changedFiles;
-  if (Array.isArray(reported) && reported.length > 0) return reported;
-  const changed = changedSinceLastSnapshot(workspace);
-  if (changed.files.length > 0) return changed.files;
-  return reported;
-}
-
-/** Writes the iteration record the Brain reads back through `execution_summary`. */
-export function recordIteration(
-  workspaceId: string,
-  input: { taskId: string; iteration: number; adapterId: string },
-  outcome: ExecutionOutcome,
-  changedFiles: number | string[]
-): void {
-  appendExecutionRecord(workspaceId, {
+export function stepRequest(input: {
+  taskId: string;
+  iteration: number;
+  goal: string;
+  instructions: string[];
+  workspaceRoot: string;
+  successCriteria?: string;
+  filesLikelyInvolved?: string[];
+}): ExecutionRequest {
+  return {
     taskId: input.taskId,
     iteration: input.iteration,
-    changedFiles,
-    tests: outcome.tests,
-    exitStatus: outcome.exitStatus,
-    timestamp: new Date().toISOString(),
-    adapterId: input.adapterId,
-    commands: outcome.commands.slice(0, 20),
-    artifactRefs: [],
-    ...(outcome.summary ? { notes: outcome.summary.slice(0, 1000) } : {}),
-  });
+    goal: input.goal,
+    instructions: input.instructions,
+    ...(input.successCriteria ? { successCriteria: input.successCriteria } : {}),
+    ...(input.filesLikelyInvolved && input.filesLikelyInvolved.length > 0
+      ? { filesLikelyInvolved: input.filesLikelyInvolved }
+      : {}),
+    workspaceRoot: input.workspaceRoot,
+  };
 }

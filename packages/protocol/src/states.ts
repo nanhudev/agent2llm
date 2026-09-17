@@ -28,6 +28,8 @@ export const A2L_STATES = [
   "DISPATCHED",
   "EXECUTING",
   "EXECUTED",
+  "NEXT_ACTION",
+  "EVIDENCE_DETAIL",
   "REVIEWING",
   "REVISE",
   "DONE",
@@ -47,18 +49,25 @@ export const A2L_MUTABLE_STATES: readonly A2LState[] = ["DISPATCHED", "EXECUTING
 const T = {
   BOOTSTRAP: ["READY", "ERROR"],
   READY: ["INIT", "HANDOFF", "ERROR"],
-  INIT: ["INSPECTING", "PLAN", "BLOCKED", "ERROR"],
+  INIT: ["NEXT_ACTION", "INSPECTING", "PLAN", "BLOCKED", "ERROR"],
   INSPECTING: ["PLAN", "BLOCKED", "ERROR"],
   PLAN: ["DISPATCHED", "BLOCKED", "ERROR"],
   DISPATCHED: ["EXECUTING", "EXECUTED", "ERROR"],
   EXECUTING: ["EXECUTED", "ERROR", "BLOCKED"],
-  EXECUTED: ["REVIEWING", "HANDOFF", "ERROR"],
+  // A Brain that has just read verified evidence may answer directly. The
+  // legacy route to a verdict went through REVIEWING, and that is still
+  // available; requiring it would be ceremony in Relay, where the evidence
+  // *is* the review, and the legacy loop already listed DONE and REVISE as
+  // acceptable replies here — the machine was the only thing that disagreed.
+  EXECUTED: ["NEXT_ACTION", "DONE", "REVISE", "REVIEWING", "HANDOFF", "ERROR"],
+  NEXT_ACTION: ["DISPATCHED", "EVIDENCE_DETAIL", "BLOCKED", "ERROR"],
+  EVIDENCE_DETAIL: ["NEXT_ACTION", "REVISE", "DONE", "BLOCKED", "ERROR"],
   REVIEWING: ["DONE", "REVISE", "BLOCKED", "ERROR", "HANDOFF"],
   REVISE: ["PLAN", "DISPATCHED", "BLOCKED", "ERROR"],
   DONE: ["HANDOFF"],
   BLOCKED: ["HANDOFF", "INIT"],
   ERROR: ["INIT", "HANDOFF", "READY", "DONE", "BLOCKED"],
-  HANDOFF: ["INIT", "INSPECTING", "PLAN", "REVIEWING", "EXECUTED", "ERROR"],
+  HANDOFF: ["INIT", "NEXT_ACTION", "INSPECTING", "PLAN", "REVIEWING", "EXECUTED", "ERROR"],
 } as const satisfies Record<A2LState, readonly A2LState[]>;
 
 /** Adjacency list of the state machine. Anything not listed is rejected. */
@@ -102,6 +111,12 @@ export function nextSpeaker(state: A2LState): A2LRole | null {
     case "INIT":
     case "EXECUTED":
     case "HANDOFF":
+      return "brain";
+    case "NEXT_ACTION":
+      return "core";
+    // The core answers the Brain's request for detail, and the Brain decides
+    // on the real evidence rather than on a line count.
+    case "EVIDENCE_DETAIL":
       return "brain";
     case "INSPECTING":
     case "REVIEWING":

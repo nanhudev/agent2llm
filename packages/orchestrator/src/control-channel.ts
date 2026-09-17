@@ -28,9 +28,26 @@ export interface ControlChannelDeps {
   brain: BrainAdapter;
   session: BrainSession;
   machine: ProtocolMachine;
-  sessions: SessionStore;
   logger: Logger;
   emit: EventSink;
+  /**
+   * Where an accepted inbound message is recorded.
+   *
+   * The legacy brain-hands loop records against the collaboration session.
+   * Relay records against the persistent conversation instead, because a pair
+   * outlives a session and a relay run must not create one — so the sink is a
+   * parameter rather than a hard dependency on the session store.
+   */
+  record?: (message: ControlMessage) => void;
+  /**
+   * Observes every message that actually reached the Brain.
+   *
+   * Relay uses it to measure what it sent: a size assembled anywhere else
+   * would describe a message that may never have been the one transmitted.
+   */
+  onSent?: (message: ControlMessage) => void;
+  /** Fallback sink, used when `record` is not supplied. */
+  sessions?: SessionStore;
   signal?: AbortSignal;
   requestUserAction?: (action: UserActionRequest) => Promise<void>;
 }
@@ -59,6 +76,7 @@ export class ControlChannel {
         this.deps.logger.warn(`Control send failed (attempt ${attempt}, retry in ${delayMs}ms): ${error.message}`),
     });
     this.afterAccepted(message);
+    this.deps.onSent?.(message);
     this.deps.emit(
       createEvent({
         kind: "CONTROL_SENT",
@@ -103,9 +121,21 @@ export class ControlChannel {
         this.deps.logger.warn(`Ignoring unexpected ${message.type} while waiting for ${allowed.join("/")}`);
         continue;
       }
-      persistFromMessage(this.deps.sessions, message);
+      this.record(message);
+      if (!allowed.includes(message.type)) {
+        this.deps.logger.warn(`Ignoring unexpected ${message.type} while waiting for ${allowed.join("/")}`);
+        continue;
+      }
       return message;
     }
+  }
+
+  private record(message: ControlMessage): void {
+    if (this.deps.record) {
+      this.deps.record(message);
+      return;
+    }
+    if (this.deps.sessions) persistFromMessage(this.deps.sessions, message);
   }
 
   private afterAccepted(message: ControlMessage): void {

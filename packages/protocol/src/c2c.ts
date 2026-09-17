@@ -27,6 +27,11 @@ export const A2L_TO_C2C: Readonly<Record<A2LState, C2CState | null>> = {
   DISPATCHED: "EXECUTING",
   EXECUTING: "EXECUTING",
   EXECUTED: "EXECUTED",
+  // C2C has no one-step state; its nearest equivalent is PLAN, and a migration
+  // that lost the message entirely would be worse than a lossy mapping.
+  NEXT_ACTION: "PLAN",
+  // Likewise: C2C's REVIEW is where a Brain looks at results and decides.
+  EVIDENCE_DETAIL: "REVIEW",
   REVIEWING: "REVIEW",
   REVISE: "PLAN",
   DONE: "DONE",

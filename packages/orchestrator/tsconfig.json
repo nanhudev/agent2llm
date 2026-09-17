@@ -28,6 +28,15 @@
     },
     {
       "path": "../workspace"
+    },
+    {
+      "path": "../evidence"
+    },
+    {
+      "path": "../metrics"
+    },
+    {
+      "path": "../pairs"
     }
   ]
 }

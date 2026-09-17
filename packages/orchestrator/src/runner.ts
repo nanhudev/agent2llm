@@ -1,9 +1,10 @@
 /**
- * The collaboration runtime.
+ * The collaboration runtime: the brain-hands workflow.
  *
- * This is the only place that knows the *shape* of a Brain/Harness
- * conversation. It knows nothing about ChatGPT, DSH, Cursor or WorkBuddy —
- * those are capabilities behind an adapter interface.
+ * The only place that knows the *shape* of a Brain/Harness conversation. It
+ * knows nothing about ChatGPT, DSH, Cursor or WorkBuddy — those are capabilities
+ * behind an adapter interface. `relay.ts` is the other workflow, and this one is
+ * what Relay must not break.
  */
 import { createControlMessage, type A2LPayload, type A2LState, type ControlMessage } from "@agent2llm/protocol";
 import {
@@ -14,21 +15,21 @@ import {
   type PermissionPolicy,
 } from "@agent2llm/core";
 import type {
-  AdapterRegistry,
   BrainAdapter,
   BrainSession,
   HarnessAdapter,
   ReadOnlyDataPlane,
-  UserActionRequest,
 } from "@agent2llm/adapter-sdk";
-import type { CollaborationSession, SessionStore } from "@agent2llm/session";
+import type { CollaborationSession } from "@agent2llm/session";
 import { Workspace } from "@agent2llm/workspace";
 import type { Logger } from "@agent2llm/logger";
 import { nullLogger } from "@agent2llm/logger";
 import { ProtocolMachine } from "./machine.js";
 import { BrainSessionManager } from "./brain-session.js";
 import { ControlChannel } from "./control-channel.js";
-import { executeIteration, recordIteration, resolveChangedFiles } from "./execution.js";
+import { executeIteration, stepRequest } from "./execution.js";
+import type { OrchestratorDeps, RunOptions, RunResult } from "./runner-types.js";
+import { recordIteration, resolveChangedFiles } from "./iteration-record.js";
 import { finalizeSession, persistCheckpoint } from "./persistence.js";
 import {
   assertCompatible,
@@ -36,50 +37,6 @@ import {
   resolveWorkflow,
   setupAdapter,
 } from "./setup.js";
-
-export interface OrchestratorDeps {
-  registry: AdapterRegistry;
-  sessions: SessionStore;
-  workspaceId: string;
-  workspaceRoot: string;
-  logger?: Logger;
-  emit?: EventSink;
-  policy?: PermissionPolicy;
-  /** Ask the human for exactly one action, then continue. */
-  requestUserAction?: (action: UserActionRequest) => Promise<void>;
-  /** Abort the run (Ctrl-C, session stop). */
-  signal?: AbortSignal;
-  /**
-   * Read-only workspace surface handed to Brains that cannot reach MCP
-   * themselves (for example an API Brain). Optional by design.
-   */
-  dataPlane?: ReadOnlyDataPlane;
-}
-
-export interface RunOptions {
-  goal: string;
-  brainId: string;
-  harnessId: string;
-  workflowId?: string;
-  sessionId?: string;
-  maxIterations?: number;
-  /** Resolve adapter setup without contacting any external product. */
-  dryRun?: boolean;
-  /**
-   * Proceed even when an adapter *measured* that it is not authenticated.
-   * Distinct from the unknown case, which already warns its way through: this
-   * is for a user who knows better than the measurement.
-   */
-  ignoreAuth?: boolean;
-}
-
-export interface RunResult {
-  sessionId: string;
-  taskId: string;
-  state: A2LState;
-  iterations: number;
-  summary: string;
-}
 
 const REVIEW_OUTCOMES: readonly A2LState[] = ["DONE", "REVISE", "BLOCKED", "ERROR", "HANDOFF"];
 
@@ -268,18 +225,21 @@ export class Orchestrator {
       );
       machine.force("EXECUTING");
 
+      // No `executionMode`, so this is the standard brief, byte for byte what
+      // every brain-hands step has always sent.
       const outcome = await executeIteration({
         harness,
         session: harnessSession,
         adapterId: harnessId,
-        workspaceId: this.deps.workspaceId,
-        workspaceRoot: this.deps.workspaceRoot,
-        taskId: session.taskId,
-        iteration,
-        goal: session.goal,
-        instructions,
-        ...(successCriteria ? { successCriteria } : {}),
-        ...(files.length > 0 ? { filesLikelyInvolved: files } : {}),
+        request: stepRequest({
+          taskId: session.taskId,
+          iteration,
+          goal: session.goal,
+          instructions,
+          workspaceRoot: this.deps.workspaceRoot,
+          ...(successCriteria ? { successCriteria } : {}),
+          ...(files.length > 0 ? { filesLikelyInvolved: files } : {}),
+        }),
         logger: this.logger,
         ...(this.deps.requestUserAction ? { requestUserAction: this.deps.requestUserAction } : {}),
       });

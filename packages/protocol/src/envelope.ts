@@ -60,10 +60,63 @@ export const executingPayloadSchema = z.object({
 
 export const executedPayloadSchema = z.object({
   result: z.string().min(1).max(1000),
-  changedFiles: z.union([z.number().int().nonnegative(), z.array(z.string().max(300)).max(200)]),
+  /**
+   * A count, or the list of paths.
+   *
+   * The default matters more than it looks: the text wire format omits empty
+   * arrays, so an execution that changed *nothing* arrives with no
+   * `changedFiles` key at all. Without the default that message fails to
+   * parse — which is exactly the case a relay step that only inspected the
+   * repository produces.
+   */
+  changedFiles: z
+    .union([z.number().int().nonnegative(), z.array(z.string().max(300)).max(200)])
+    .default([]),
   tests: z.string().max(300).nullable().default(null),
   exitStatus: z.string().max(60).default("ok"),
   commands: z.array(z.string().max(200)).max(20).default([]),
+  /**
+   * The compact, verified account of this execution — what Agent2LLM read
+   * from the repository, not what the Harness said about it.
+   *
+   * It travels on the execution message rather than as a second message
+   * because it belongs to it: the ids, the exit status and the file list are
+   * one execution's facts, and splitting them would let a Brain reason about
+   * half a step. Bounded above `MAX_COMPACT_CHARS` so the compressor's own
+   * ceiling is the binding one.
+   */
+  evidence: z.string().max(2400).optional(),
+});
+
+/**
+ * Relay's answer to a Brain that asked to see something.
+ *
+ * The compact evidence tells a Brain that `src/auth.ts` moved by +42/-10. That
+ * is enough to decide most steps and not enough to judge all of them, so a
+ * Brain may name the files it needs — and this is what comes back: the diff,
+ * read from the repository by Agent2LLM and sanitized, in the same
+ * conversation. It is a distinct state rather than a second `EXECUTED`
+ * because nothing was executed; Agent2LLM only looked.
+ */
+export const evidenceDetailPayloadSchema = z.object({
+  file: z.string().min(1).max(400),
+  /** The diff. Sanitized and bounded by the evidence collector. */
+  detail: z.string().max(8000),
+});
+
+/**
+ * Relay Mode's one-step reply.
+ *
+ * `PLAN` means "inspect, then here is the whole plan"; `REVISE` means "that
+ * attempt was wrong". A relay Brain needs neither — it needs to name the next
+ * executable step and how it will be judged, and nothing else. Giving that its
+ * own state is what lets the harness brief be built from one message instead
+ * of a heuristic over a plan.
+ */
+export const nextActionPayloadSchema = z.object({
+  task: z.string().min(1).max(2000),
+  acceptance: z.array(z.string().min(1).max(300)).max(12).default([]),
+  filesLikelyInvolved: z.array(z.string().min(1).max(300)).max(50).default([]),
 });
 
 export const reviewingPayloadSchema = z.object({
@@ -109,6 +162,8 @@ export const a2lPayloadSchemas = {
   DISPATCHED: dispatchedPayloadSchema,
   EXECUTING: executingPayloadSchema,
   EXECUTED: executedPayloadSchema,
+  NEXT_ACTION: nextActionPayloadSchema,
+  EVIDENCE_DETAIL: evidenceDetailPayloadSchema,
   REVIEWING: reviewingPayloadSchema,
   REVISE: revisePayloadSchema,
   DONE: donePayloadSchema,
@@ -130,6 +185,8 @@ export type A2LTypedPayload =
   | ({ type: "DISPATCHED" } & A2LPayload["DISPATCHED"])
   | ({ type: "EXECUTING" } & A2LPayload["EXECUTING"])
   | ({ type: "EXECUTED" } & A2LPayload["EXECUTED"])
+  | ({ type: "NEXT_ACTION" } & A2LPayload["NEXT_ACTION"])
+  | ({ type: "EVIDENCE_DETAIL" } & A2LPayload["EVIDENCE_DETAIL"])
   | ({ type: "REVIEWING" } & A2LPayload["REVIEWING"])
   | ({ type: "REVISE" } & A2LPayload["REVISE"])
   | ({ type: "DONE" } & A2LPayload["DONE"])
