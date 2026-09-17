@@ -21,6 +21,10 @@ async function resolveEntrypoint(specifier: string, cwd: string): Promise<string
   try {
     return require.resolve(specifier);
   } catch {
+    // The import.meta.resolve fallback is inside this catch on purpose: in
+    // the SEA executable (CommonJS output) esbuild empties import.meta, so
+    // the call turns into a TypeError that this catch absorbs and converts
+    // into the same user-facing adapterNotFound error as every other failure.
     try {
       const resolved = import.meta.resolve(specifier);
       return resolved.startsWith("file:") ? resolved : resolved;
