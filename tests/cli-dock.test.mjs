@@ -324,6 +324,40 @@ test("cli-dock", "the Run button runs the real relay path and reports the real s
   assertEqual(after.busy, false, "and the dock is free again");
 });
 
+test("cli-dock", "while a run executes, the state endpoint is the live channel", async () => {
+  const { info } = await ensureDock();
+  const base = `http://${info.host}:${info.port}`;
+  const query = `${base}/api/state?token=${info.token}`;
+  const pairId = (await (await fetch(query)).json()).pairs[0].pairId;
+
+  // Started, not awaited: the page's Run button is exactly this shape — a
+  // blocking POST, with /api/state polled beside it for the live panel.
+  const runPromise = fetch(`${base}/api/run?token=${info.token}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pairId, goal: "Write one small file and stop." }),
+  });
+
+  let busySeen = false;
+  for (let polled = 0; polled < 3; polled++) {
+    const state = await (await fetch(query)).json();
+    assert(typeof state.busy === "boolean", "busy is a boolean a page can branch on");
+    assert(Array.isArray(state.events), "events is the operational line tail");
+    assert(Array.isArray(state.pending), "pending is the list of unanswered approvals");
+    if (state.busy) busySeen = true;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  // The mock run can finish faster than a poll lands, so *catching* busy:true
+  // is not asserted — but whatever the poller reads must be well-formed, and
+  // the finished run's own operational lines must be sitting on that channel,
+  // because that is the exact content a live panel would have been showing.
+  const outcome = await runPromise;
+  assertEqual(outcome.status, 200, "the run completed");
+  const after = await (await fetch(query)).json();
+  assertEqual(after.busy, false, "the dock reports itself free when it is done");
+  assert(after.events.length > 0 || busySeen, `the run's operational lines are on the channel: ${JSON.stringify(after.events)}`);
+});
+
 test("cli-dock", "a port that cannot be an integer is rejected with the reason", () => {
   const result = a2l("dock", "--port", "99999");
   assertEqual(result.status, 1, "the dock must not start on a nonsense port");
