@@ -137,12 +137,16 @@ Harness 也不应该必须拥有整段长期对话。
 npm install -g agent2llm
 ```
 
+全局安装会同时在桌面创建一个 **Agent2LLM Dock** 快捷方式，双击即可直接打开 Dock。设置 `AGENT2LLM_NO_SHORTCUT=1` 可以跳过，之后也可以用 `a2l dock shortcut --remove` 移除。
+
 检查当前机器：
 
 ```bash
 a2l doctor
 a2l adapters
 ```
+
+`a2l adapters` 默认只列出这台机器现在就能用的 Adapter；`a2l adapters --all` 会把还需要配置的一起列出来。
 
 `agent2llm` 完整命令仍然可以使用，但现在推荐使用更短的：
 
@@ -191,6 +195,8 @@ a2l dock
 ```
 
 Dock 可以完成 Pair 创建、输入目标、开始执行，并查看当前运行状态。
+
+运行 `a2l dock` 时页面会自动打开：优先使用 Edge 或 Chrome 的应用窗口，否则使用默认浏览器。只需要 URL 的话，加 `--no-open`。
 
 ```text
 ┌─────────────────────────────────────────┐
@@ -313,6 +319,7 @@ a2l pair show
 a2l run "你的目标"
 
 a2l dock
+a2l dock shortcut --remove
 
 a2l report
 a2l logs
@@ -344,10 +351,13 @@ Agent2LLM 仍然处于快速开发阶段。
 - 面向执行的 Harness Task；
 - Repository Evidence；
 - 持久 Brain Conversation；
-- 本地 Dock；
-- Adapter 检测；
+- 本地 Dock，会自动打开自己的窗口；
+- 全局安装时创建的桌面 Dock 快捷方式；
+- Adapter 检测，区分现在可用和需要配置；
 - 用量与效率统计；
 - 真实 Provider E2E 验证链路。
+
+0.3.1 和 0.3.2 两次迭代集中在桌面体验：Dock 会自动打开，全局安装时会创建桌面快捷方式。
 
 但并不是所有 Adapter 组合都已经在所有真实环境跑通。
 

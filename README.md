@@ -127,12 +127,16 @@ Requires Node.js 20 or newer.
 npm install -g agent2llm
 ```
 
+A global install also places an **Agent2LLM Dock** shortcut on your desktop — double-clicking it opens the Dock directly. Set `AGENT2LLM_NO_SHORTCUT=1` to skip that, or remove it later with `a2l dock shortcut --remove`.
+
 Check your machine:
 
 ```bash
 a2l doctor
 a2l adapters
 ```
+
+By default `a2l adapters` lists only the adapters this machine can use today; `a2l adapters --all` also lists the ones that still need setup.
 
 `agent2llm` remains available as a compatibility command, but `a2l` is the primary CLI.
 
@@ -177,6 +181,8 @@ a2l dock
 ```
 
 The local Dock lets you create a Pair, enter a goal, start a Run, and follow its progress without memorizing CLI commands.
+
+Running `a2l dock` opens its page for you — in an Edge or Chrome app-style window when available, otherwise the default browser. Use `--no-open` if you only want the printed URL.
 
 ```text
 ┌─────────────────────────────────────────┐
@@ -289,6 +295,7 @@ a2l pair show
 a2l run "your goal"
 
 a2l dock
+a2l dock shortcut --remove
 
 a2l report
 a2l logs
@@ -316,10 +323,13 @@ The current codebase includes:
 - execution-focused Harness requests;
 - repository evidence collection;
 - persistent Brain conversation state;
-- local Dock UI;
-- adapter discovery;
+- local Dock UI that opens its own window;
+- desktop Dock shortcut created on global install;
+- adapter discovery that separates installed from needs-setup;
 - usage and efficiency metrics;
 - real-provider E2E tooling.
+
+Iterations 0.3.1 and 0.3.2 focused on the desktop experience: the Dock opens itself, and a desktop shortcut is created on global install.
 
 Not every adapter combination has been verified on every machine.
 
