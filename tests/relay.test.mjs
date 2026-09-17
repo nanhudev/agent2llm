@@ -28,7 +28,7 @@ import { renderExecutionBrief } from "@agent2llm/execution";
 import { PairStore, RunStore, createPair, pairIdentity } from "@agent2llm/pairs";
 import { createMockBrain } from "@agent2llm/brain-mock";
 import { test, assert, assertEqual } from "@agent2llm/testing";
-import { scratchDir } from "./_scratch.mjs";
+import { discardScratch, scratchDir } from "./_scratch.mjs";
 import { report } from "./_report.mjs";
 
 function git(cwd, ...args) {
@@ -155,7 +155,10 @@ function setup(options = {}) {
   const root = options.root ?? repo();
   const stateDir = scratchDir("a2l-relay-state");
   const registry = new AdapterRegistry();
-  const brain = createMockBrain({ script: options.script ?? [] });
+  // No script at all when the test did not ask for one, so the Brain falls back
+  // to the plan its workflow needs. An empty array is not the same thing: it is
+  // an explicit plan with no steps in it, and the mock now refuses one.
+  const brain = createMockBrain(options.script ? { script: options.script } : {});
   const harness = new WritingHarness({ root, overReport: options.overReport, fail: options.fail });
   registry.registerAll([brain, harness]);
 
@@ -213,7 +216,37 @@ test("relay", "the harness gets the next step and never the run's goal", async (
       "and neither does any plan the Brain did not restate"
     );
   } finally {
-    fs.rmSync(ctx.root, { recursive: true, force: true });
+    discardScratch(ctx.root);
+  }
+});
+
+test("relay", "an unscripted Brain gets a Relay plan, not the brain-hands one", async () => {
+  // Nothing is scripted anywhere: this is the zero-setup path a new user takes,
+  // and it is the one the dock's Run button used to fail on. A Relay run driven
+  // by the brain-hands plan ends `blocked` with "the Brain sent PLAN where a
+  // next step or a verdict was expected", so reaching `done` at all *is* the
+  // assertion — the default plan followed the workflow the INIT declared.
+  const ctx = setup();
+  try {
+    const result = await ctx.runner.run({
+      pair: ctx.pairs.get("a2lp_relay"),
+      runId: "a2lr_default",
+      goal: "prove the default plan belongs to the declared workflow",
+      context: ctx.context,
+    });
+
+    assertEqual(result.status, "done", `expected done, got ${result.status}: ${result.summary}`);
+    assertEqual(ctx.harness.briefs.length, 1, "the Brain named exactly one next step");
+    assertEqual(
+      ctx.harness.briefs[0].request.executionMode,
+      "execution-only",
+      "and it was dispatched as a Relay step, not as a goal"
+    );
+    // The default step names no file, so this fixture writes nothing — and that
+    // is recorded as nothing changed rather than counted as work done.
+    assertEqual(result.metrics.filesChanged, 0, "a step that wrote nothing changed no files");
+  } finally {
+    discardScratch(ctx.root);
   }
 });
 
@@ -260,7 +293,7 @@ test("relay", "the same Brain conversation serves a second run", async () => {
     assertEqual(saved.brainRef.adapterId, "mock-brain", "and the pointer belongs to the Brain adapter");
     assert(saved.lastRunAt, "the pair records when it last ran");
   } finally {
-    fs.rmSync(ctx.root, { recursive: true, force: true });
+    discardScratch(ctx.root);
   }
 });
 
@@ -292,7 +325,7 @@ test("relay", "evidence is read from the repository, not from the harness", asyn
       `the verdict is stated: ${executed[0].payload.evidence}`
     );
   } finally {
-    fs.rmSync(ctx.root, { recursive: true, force: true });
+    discardScratch(ctx.root);
   }
 });
 
@@ -324,7 +357,7 @@ test("relay", "a harness that claims an untouched file is contradicted, not beli
     assertEqual(result.status, "blocked", `expected blocked, got ${result.status}`);
     assert(/contradicts/i.test(result.summary), `the summary must say why: ${result.summary}`);
   } finally {
-    fs.rmSync(ctx.root, { recursive: true, force: true });
+    discardScratch(ctx.root);
   }
 });
 
@@ -363,7 +396,7 @@ test("relay", "a Brain that calls it done over a failed execution is blocked, no
     assertEqual(saved.receipts[0].status, "failure", "and recorded as a failure, not a success");
     assertEqual(saved.metrics.filesChanged, 0, "nothing changed on disk");
   } finally {
-    fs.rmSync(ctx.root, { recursive: true, force: true });
+    discardScratch(ctx.root);
   }
 });
 
@@ -396,7 +429,7 @@ test("relay", "a Brain may ask for one file's diff and gets it from the reposito
     );
     assertEqual(ctx.harness.briefs.length, 1, "asking to look is not an execution");
   } finally {
-    fs.rmSync(ctx.root, { recursive: true, force: true });
+    discardScratch(ctx.root);
   }
 });
 
@@ -427,7 +460,7 @@ test("relay", "a web Brain's silence about tokens is recorded as unknown, never 
     );
     assertEqual(result.metrics.filesChanged, 1, "the changed file came from git");
   } finally {
-    fs.rmSync(ctx.root, { recursive: true, force: true });
+    discardScratch(ctx.root);
   }
 });
 
@@ -459,7 +492,7 @@ test("relay", "a REVISE is the next step, not a re-plan", async () => {
       "the correction actually landed on disk"
     );
   } finally {
-    fs.rmSync(ctx.root, { recursive: true, force: true });
+    discardScratch(ctx.root);
   }
 });
 
@@ -494,7 +527,7 @@ test("relay", "without a context the run refuses rather than guessing a folder",
     assert(/--workspace/.test(failed.hint ?? ""), `the hint names the way out: ${failed.hint}`);
     assertEqual(ctx.harness.briefs.length, 0, "nothing was executed");
   } finally {
-    fs.rmSync(ctx.root, { recursive: true, force: true });
+    discardScratch(ctx.root);
   }
 });
 

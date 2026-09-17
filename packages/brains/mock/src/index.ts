@@ -9,7 +9,6 @@
 import { emptyManifest, withCapabilities, type CapabilityManifest } from "@agent2llm/protocol";
 import { createControlMessage, encodeControlMessage, parseControlBlock } from "@agent2llm/protocol";
 import type { ControlMessage } from "@agent2llm/protocol";
-import fs from "node:fs";
 import {
   BaseBrainAdapter,
   type AdapterMetadata,
@@ -20,16 +19,16 @@ import {
   type SetupResult,
   type VerificationResult,
 } from "@agent2llm/adapter-sdk";
+import {
+  DEFAULT_HANDS_SCRIPT,
+  DEFAULT_RELAY_SCRIPT,
+  WORKFLOW_RELAY,
+  scriptFromEnvironment,
+  type MockScriptStep,
+} from "./scripts.js";
 
-export type MockScriptStep =
-  | { type: "INSPECTING"; focus?: string }
-  /** Relay Mode: one executable step plus how it will be judged. */
-  | { type: "NEXT_ACTION"; task: string; acceptance?: string[]; files?: string[] }
-  | { type: "PLAN"; actions: string[]; rationale?: string; successCriteria?: string; files?: string[] }
-  | { type: "REVIEWING"; focus?: string }
-  | { type: "DONE"; summary: string }
-  | { type: "REVISE"; reason: string; requiredChanges: string[] }
-  | { type: "BLOCKED"; reason: string; needs?: string[] };
+export type { MockScriptStep } from "./scripts.js";
+export { scriptFromEnvironment } from "./scripts.js";
 
 export interface MockBrainOptions {
   /** Consumed in order; the last step repeats once exhausted. */
@@ -38,84 +37,21 @@ export interface MockBrainOptions {
   failVerification?: boolean;
 }
 
-const STEP_TYPES = [
-  "INSPECTING",
-  "NEXT_ACTION",
-  "PLAN",
-  "REVIEWING",
-  "DONE",
-  "REVISE",
-  "BLOCKED",
-] as const;
-
-/** The fields a step cannot do without, so a typo fails at load, not mid-run. */
-const REQUIRED_FIELDS: Record<string, string[]> = {
-  NEXT_ACTION: ["task"],
-  PLAN: ["actions"],
-  DONE: ["summary"],
-  REVISE: ["reason", "requiredChanges"],
-  BLOCKED: ["reason"],
-};
-
-/**
- * A script supplied by the environment, so the real CLI can drive this Brain.
- *
- * `A2L_MOCK_BRAIN_SCRIPT=<path to a JSON array of steps>`.
- *
- * This is what makes an end-to-end acceptance run possible at all: register the
- * mock brain with `--brain mock-brain`, point the pair at a real harness, and
- * every layer above the reasoning is the shipped one — pair store, dispatch
- * brief, harness subprocess, evidence collector, receipts. Without it the mock
- * can only be driven from inside a test process, and an end-to-end run through
- * the CLI has no way to say what to do.
- *
- * A malformed script throws instead of falling back to the default. A run that
- * quietly executed a different plan than the one on disk is the worst possible
- * outcome for something whose result gets cited as evidence.
- */
-export function scriptFromEnvironment(
-  env: Record<string, string | undefined> = process.env
-): MockScriptStep[] | undefined {
-  const file = env.A2L_MOCK_BRAIN_SCRIPT;
-  if (!file) return undefined;
-
-  let raw: string;
-  try {
-    raw = fs.readFileSync(file, "utf8");
-  } catch (error) {
-    throw new Error(`A2L_MOCK_BRAIN_SCRIPT is set but ${file} could not be read: ${(error as Error).message}`);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    throw new Error(`A2L_MOCK_BRAIN_SCRIPT: ${file} is not valid JSON: ${(error as Error).message}`);
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error(`A2L_MOCK_BRAIN_SCRIPT: ${file} must be a non-empty array of steps.`);
-  }
-  parsed.forEach((step, index) => {
-    const value = step as { type?: unknown };
-    if (typeof value?.type !== "string" || !(STEP_TYPES as readonly string[]).includes(value.type)) {
-      throw new Error(
-        `A2L_MOCK_BRAIN_SCRIPT: step ${index} has type '${String(value?.type)}'; ` +
-          `expected one of ${STEP_TYPES.join(", ")}.`
-      );
-    }
-    for (const field of REQUIRED_FIELDS[value.type] ?? []) {
-      if ((step as Record<string, unknown>)[field] === undefined) {
-        throw new Error(`A2L_MOCK_BRAIN_SCRIPT: step ${index} (${value.type}) is missing '${field}'.`);
-      }
-    }
-  });
-  return parsed as MockScriptStep[];
-}
-
 interface MockState {
   cursor: number;
   inbox: ControlMessage[];
   sent: ControlMessage[];
   goal: string;
+  /**
+   * Did the INIT say this is a Relay run?
+   *
+   * Read from the `workflow:relay` constraint the orchestrator already sends,
+   * because the two workflows need different default plans: Relay accepts a
+   * NEXT_ACTION or a verdict, and the brain-hands plan opens with PLAN. A
+   * default that ignored this would make the mock pair fail on the first round
+   * of the workflow the product leads with.
+   */
+  relay: boolean;
   context: {
     sessionId: string;
     taskId: string;
@@ -129,20 +65,35 @@ interface MockState {
  */
 export class MockBrainAdapter extends BaseBrainAdapter {
   private readonly states = new Map<string, MockState>();
-  private readonly defaultScript: MockScriptStep[];
+  /**
+   * A script someone actually asked for: constructor or environment.
+   *
+   * `null` means "no opinion", which is what lets the workflow pick the default
+   * without ever overriding a caller's explicit choice.
+   */
+  private readonly providedScript: MockScriptStep[] | null;
 
   constructor(private readonly options: MockBrainOptions = {}) {
     super();
-    // Precedence: an explicit script, then one from the environment, then the
-    // legacy brain-hands default. The environment sits below the constructor so
-    // a test that passes a script is never surprised by the machine it runs on.
-    this.defaultScript = options.script ??
-      scriptFromEnvironment() ?? [
-        { type: "INSPECTING", focus: "workspace" },
-        { type: "PLAN", actions: ["Implement the change", "Run the tests"], successCriteria: "Tests pass" },
-        { type: "REVIEWING" },
-        { type: "DONE", summary: "Task complete." },
-      ];
+    // An explicit empty plan is never what someone meant: `awaitControl` would
+    // have no step to hand back and the run would die on an index error inside
+    // the loop, far from the line that caused it. Omit the option instead and
+    // the workflow's own plan applies.
+    if (options.script && options.script.length === 0) {
+      throw new Error(
+        "Mock brain: an explicit script must not be empty; omit it to use the workflow's default plan."
+      );
+    }
+    // Precedence: an explicit script, then one from the environment. The
+    // environment sits below the constructor so a test that passes a script is
+    // never surprised by the machine it runs on.
+    this.providedScript = options.script ?? scriptFromEnvironment() ?? null;
+  }
+
+  /** The plan this session follows: the caller's, or the one its workflow needs. */
+  private scriptFor(state: MockState): MockScriptStep[] {
+    if (this.providedScript) return this.providedScript;
+    return state.relay ? DEFAULT_RELAY_SCRIPT : DEFAULT_HANDS_SCRIPT;
   }
 
   metadata(): AdapterMetadata {
@@ -186,6 +137,7 @@ export class MockBrainAdapter extends BaseBrainAdapter {
       inbox: [],
       sent: [],
       goal: ctx.goal,
+      relay: false,
       context: { sessionId: ctx.sessionId, taskId: ctx.taskId, workspaceId: ctx.workspaceId },
     });
     return { id: ctx.sessionId, adapterId: "mock-brain", ref: { sessionId: ctx.sessionId } };
@@ -199,6 +151,7 @@ export class MockBrainAdapter extends BaseBrainAdapter {
         inbox: [],
         sent: [],
         goal: String(checkpoint.ref.goal ?? ""),
+        relay: false,
         context: {
           sessionId: id,
           taskId: String(checkpoint.ref.taskId ?? "mock-task"),
@@ -221,6 +174,14 @@ export class MockBrainAdapter extends BaseBrainAdapter {
       taskId: message.taskId,
       workspaceId: message.workspaceId,
     };
+    if (message.type === "INIT") {
+      // The orchestrator already says which workflow this is; the mock only has
+      // to listen. `constraints` is schema-validated upstream, but this adapter
+      // is the one place that must not throw on a surprise, so it reads
+      // defensively and treats anything else as brain-hands.
+      const constraints = message.payload.constraints;
+      state.relay = Array.isArray(constraints) && constraints.includes(WORKFLOW_RELAY);
+    }
     state.sent.push(message);
     // Round-trip through the wire format so the mock exercises the real parser.
     const reparsed = parseControlBlock(encodeControlMessage(message));
@@ -231,12 +192,11 @@ export class MockBrainAdapter extends BaseBrainAdapter {
     const state = this.require(session);
     const last = state.sent[state.sent.length - 1];
     const iteration = last?.iteration ?? 0;
-    // Steps advance per awaited reply: INIT -> INSPECTING -> PLAN -> REVIEWING
-    // -> DONE. The final step repeats so REVISE loops stay deterministic.
     const index = state.cursor++;
-    const step =
-      this.defaultScript[Math.min(index, this.defaultScript.length - 1)] ??
-      this.defaultScript[this.defaultScript.length - 1]!;
+    const script = this.scriptFor(state);
+    // Steps advance per awaited reply. The final step repeats so a REVISE loop
+    // stays deterministic.
+    const step = script[Math.min(index, script.length - 1)] ?? script[script.length - 1]!;
     return this.render(session, step, iteration);
   }
 
@@ -319,6 +279,7 @@ export class MockBrainAdapter extends BaseBrainAdapter {
         inbox: [],
         sent: [],
         goal: "",
+        relay: false,
         context: { sessionId: session.id, taskId: "mock-task", workspaceId: MOCK_WORKSPACE_ID },
       };
       this.states.set(session.id, state);

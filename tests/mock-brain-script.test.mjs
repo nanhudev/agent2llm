@@ -121,4 +121,19 @@ test("mock-brain-script", "an explicit script outranks the environment", async (
   });
 });
 
+test("mock-brain-script", "an explicit empty plan is refused at construction", () => {
+  // Without this the run dies later, on an index error inside the control loop,
+  // a long way from the call that caused it — and the crash reads like a bug in
+  // the orchestrator rather than a caller who passed the wrong thing.
+  const error = assertThrows(
+    () => createMockBrain({ script: [] }),
+    "an empty plan must be refused where it is written"
+  );
+  assert(/must not be empty/.test(error.message), `the message must say so, got: ${error.message}`);
+  assert(
+    /omit it/.test(error.message),
+    `and must name the way out, got: ${error.message}`
+  );
+});
+
 await report();
