@@ -19,6 +19,17 @@ All notable changes are documented here. Format follows
 
 ### Fixed
 
+- **Harnesses installed by `npm install -g` could not be executed on Windows.**
+  Discovery reported the extensionless POSIX shim npm writes next to the
+  `.cmd`, but Node refuses to spawn such a file, so every dispatch died with
+  `EINVAL` right after `detect` had reported the tool's version. CLI harnesses
+  now launch an extensionless shim through its shebang interpreter, the same
+  route the version probe already used, passing argv untouched.
+- **A harness's stderr reason is no longer denied in failure summaries.**
+  When a failing harness printed its only readable explanation on stderr
+  (`dsh: UNKNOWN_MODEL: …`) and nothing on stdout, the failure sentence
+  claimed there was "no readable message". The summary now falls back to the
+  last meaningful stderr line when stdout has none.
 - **Usage terminology: harness model usage is unknown, not zero.** The 0.2.0
   notes said the harness side of every run is "0 brain tokens by construction,
   because execution never consults a model". Agent2LLM cannot know that: a
