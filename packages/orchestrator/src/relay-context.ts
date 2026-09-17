@@ -78,17 +78,44 @@ export class RelayState {
   /**
    * The honest status.
    *
-   * A run whose evidence was *contradicted* — the Harness reported success and
-   * named files while the working tree was untouched — is not reported as
-   * `done` even if the Brain accepted it. The Brain decided on what it was
-   * shown; the status is the record of what was there.
+   * Two ways a Brain's `DONE` is not the run's status, and both were found by
+   * running against a real harness rather than by reasoning about one:
+   *
+   * 1. **Contradicted evidence.** The Harness reported success and named files
+   *    while the working tree was untouched. Nothing happened, and the run said
+   *    so before this rule existed.
+   * 2. **Every dispatch failed.** Codex was over its quota, so both executions
+   *    came back `failure` with nothing changed — and the run still ended
+   *    `done`, exit code 0, because the scripted Brain had nothing better to
+   *    say. A status a user cannot trust is worse than no status: `done` here
+   *    means "the Brain stopped", not "the work exists".
+   *
+   * A run with *no* receipts is left alone: a Brain that answers `DONE` without
+   * asking for anything has claimed the work was already done, and there is no
+   * execution to contradict it. The metrics say `0 execution(s)`.
+   *
+   * The Brain decided on what it was shown; the status is the record of what
+   * was there.
    */
   normalize(status: RunStatus, summary: string): { status: RunStatus; summary: string } {
-    if (status !== "done" || this.evidence?.verdict !== "contradicted") return { status, summary };
-    return {
-      status: "blocked",
-      summary: `The Brain accepted the run, but the repository contradicts the last execution: ${this.evidence.verdictReason}`,
-    };
+    if (status !== "done") return { status, summary };
+    if (this.evidence?.verdict === "contradicted") {
+      return {
+        status: "blocked",
+        summary: `The Brain accepted the run, but the repository contradicts the last execution: ${this.evidence.verdictReason}`,
+      };
+    }
+    const receipts = this.run.receipts;
+    if (receipts.length > 0 && !receipts.some((receipt) => receipt.status === "success")) {
+      const first = receipts[0]!;
+      return {
+        status: "blocked",
+        summary:
+          `The Brain called it done, but all ${receipts.length} execution(s) failed and nothing was verified. ` +
+          `Last failure: ${first.summary || first.exitStatus}`,
+      };
+    }
+    return { status, summary };
   }
 
   finish(status: RunStatus, summary: string): { status: RunStatus; summary: string } {

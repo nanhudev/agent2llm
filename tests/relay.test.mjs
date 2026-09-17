@@ -7,13 +7,15 @@
  * the Brain receives is read from disk by the same collector that production
  * uses. A mocked evidence path would test the mock.
  *
- * The four claims under test:
+ * The claims under test:
  *
  *   1. The Harness gets the next step and not the run's goal.
  *   2. The Brain's conversation survives from one run to the next.
  *   3. The evidence is verified against the repository, not accepted from the
  *      Harness.
  *   4. No token number is invented for a Brain that reports none.
+ *   5. The Brain's `DONE` is a claim, not the run status — a run whose every
+ *      execution failed is reported `blocked`, not `done`.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -57,6 +59,9 @@ function repo() {
  * test can name a file and its contents. Everything else — the exit code, the
  * changed-file list, the test line — is reported the way a real harness would
  * report it, including the option to over-report it.
+ *
+ * `fail` makes it fail the way a real harness fails when its own quota runs
+ * out: an error code, a message, and a working tree that did not move.
  */
 class WritingHarness extends BaseHarnessAdapter {
   briefs = [];
@@ -64,6 +69,7 @@ class WritingHarness extends BaseHarnessAdapter {
     super();
     this.root = options.root;
     this.overReport = options.overReport ?? false;
+    this.fail = options.fail ?? null;
   }
 
   metadata() {
@@ -109,13 +115,23 @@ class WritingHarness extends BaseHarnessAdapter {
     const task = this.briefs[this.briefs.length - 1].request;
     const [target, content] = String(task.nextAction ?? "").split(" :: ");
     const written = [];
-    if (target && content !== undefined) {
+    if (!this.fail && target && content !== undefined) {
       const full = path.join(this.root, target);
       fs.mkdirSync(path.dirname(full), { recursive: true });
       fs.writeFileSync(full, `${content}\n`);
       written.push(target);
     }
     yield { type: "started", at: new Date().toISOString(), handleId: handle.id };
+    if (this.fail) {
+      // A failed execution is data, not an exception: this is how the quota
+      // wall behind the real-Codex E2E presented itself.
+      yield {
+        type: "failed",
+        at: new Date().toISOString(),
+        error: { code: "harness_unavailable", message: this.fail },
+      };
+      return;
+    }
     yield {
       type: "completed",
       at: new Date().toISOString(),
@@ -140,7 +156,7 @@ function setup(options = {}) {
   const stateDir = scratchDir("a2l-relay-state");
   const registry = new AdapterRegistry();
   const brain = createMockBrain({ script: options.script ?? [] });
-  const harness = new WritingHarness({ root, overReport: options.overReport });
+  const harness = new WritingHarness({ root, overReport: options.overReport, fail: options.fail });
   registry.registerAll([brain, harness]);
 
   const pairs = new PairStore(path.join(stateDir, "pairs"));
@@ -307,6 +323,45 @@ test("relay", "a harness that claims an untouched file is contradicted, not beli
     // status follows the repository, not the acceptance.
     assertEqual(result.status, "blocked", `expected blocked, got ${result.status}`);
     assert(/contradicts/i.test(result.summary), `the summary must say why: ${result.summary}`);
+  } finally {
+    fs.rmSync(ctx.root, { recursive: true, force: true });
+  }
+});
+
+test("relay", "a Brain that calls it done over a failed execution is blocked, not done", async () => {
+  const ctx = setup({
+    // The step cannot run: the harness fails the way a real one fails when its
+    // own quota runs out — an error message, and a working tree that did not
+    // move. The Brain, seeing a failure it cannot fix, still says DONE.
+    script: [writeStep("never.ts", 1), { type: "DONE", summary: "nothing left to do" }],
+    fail: "unexpected status 403 Forbidden",
+  });
+  try {
+    const result = await ctx.runner.run({
+      pair: ctx.pairs.get("a2lp_relay"),
+      runId: "a2lr_failed",
+      goal: "run a step that cannot run",
+      context: ctx.context,
+    });
+
+    // Before the rule this was `done` with exit code 0, which reads as "the
+    // work exists". It does not.
+    assertEqual(result.status, "blocked", `expected blocked, got ${result.status}: ${result.summary}`);
+    assert(
+      /all 1 execution\(s\) failed/i.test(result.summary),
+      `the summary must say why: ${result.summary}`
+    );
+    assert(result.summary.includes("403"), `and repeat what the harness said: ${result.summary}`);
+
+    // The Brain really did say DONE — this is not "the Brain objected", it is
+    // "the Brain stopped and the record disagrees".
+    const sent = ctx.brain.sentMessages("a2ls_a2lp_relay");
+    assert(sent.some((message) => message.type === "EXECUTED"), "the Brain was told about the failure");
+
+    const saved = ctx.runs.get("a2lr_failed");
+    assertEqual(saved.receipts.length, 1, "the failed execution is on the record");
+    assertEqual(saved.receipts[0].status, "failure", "and recorded as a failure, not a success");
+    assertEqual(saved.metrics.filesChanged, 0, "nothing changed on disk");
   } finally {
     fs.rmSync(ctx.root, { recursive: true, force: true });
   }
