@@ -29,15 +29,16 @@ export function paint(color: keyof typeof C, text: string): string {
 
 export const bold = (t: string): string => paint("bold", t);
 export const dim = (t: string): string => paint("dim", t);
-export const ok = (t: string): string => paint("green", t);
-export const warn = (t: string): string => paint("yellow", t);
-export const fail = (t: string): string => paint("red", t);
-export const info = (t: string): string => paint("cyan", t);
+/** Colour helpers: they return coloured text and print nothing. */
+export const green = (t: string): string => paint("green", t);
+export const yellow = (t: string): string => paint("yellow", t);
+export const red = (t: string): string => paint("red", t);
+export const cyan = (t: string): string => paint("cyan", t);
 
-export const MARK_OK = ok("✓");
+export const MARK_OK = green("✓");
 export const MARK_NO = dim("○");
-export const MARK_WARN = warn("!");
-export const MARK_FAIL = fail("✗");
+export const MARK_WARN = yellow("!");
+export const MARK_FAIL = red("✗");
 
 export function heading(text: string): void {
   process.stdout.write(`\n${bold(text)}\n`);
@@ -45,6 +46,27 @@ export function heading(text: string): void {
 
 export function line(text = ""): void {
   process.stdout.write(`${text}\n`);
+}
+
+/**
+ * Printers for the three outcomes a command reports.
+ *
+ * These were colour helpers once, which meant the eighteen call sites that used
+ * them as printers — `ui.fail("Unknown command")`, `ui.warn("No goal supplied")`
+ * — compiled, ran, and printed nothing at all. A name that could be either
+ * cannot be told apart at the call site, so colouring moved to
+ * `green`/`yellow`/`red`/`cyan` and these three now speak.
+ */
+export function ok(text: string): void {
+  line(`  ${MARK_OK} ${text}`);
+}
+
+export function warn(text: string): void {
+  line(`  ${MARK_WARN} ${text}`);
+}
+
+export function fail(text: string): void {
+  line(`  ${MARK_FAIL} ${text}`);
 }
 
 export interface TableColumn {
@@ -93,7 +115,7 @@ export async function promptChoice<T>(question: string, choices: Choice<T>[]): P
     const answer = await promptText("Select", "1");
     const index = Number.parseInt(answer, 10) - 1;
     if (Number.isInteger(index) && index >= 0 && index < choices.length) return choices[index]!.value;
-    line(warn(`Enter a number between 1 and ${choices.length}.`));
+    warn(`Enter a number between 1 and ${choices.length}.`);
   }
 }
 
@@ -109,8 +131,8 @@ export function spinner(initial: string): Spinner {
     line(`  ${initial}`);
     return {
       update: (text) => line(`  ${text}`),
-      succeed: (text) => line(`  ${ok("✓")} ${text}`),
-      fail: (text) => line(`  ${fail("✗")} ${text}`),
+      succeed: (text) => line(`  ${MARK_OK} ${text}`),
+      fail: (text) => line(`  ${MARK_FAIL} ${text}`),
       stop: () => undefined,
     };
   }
@@ -149,9 +171,9 @@ export async function requestUserAction(action: {
   url?: string;
 }): Promise<void> {
   line();
-  line(`${warn("Action required")} ${dim(`[${action.kind}]`)}`);
+  line(`${yellow("Action required")} ${dim(`[${action.kind}]`)}`);
   line(`  ${action.message}`);
-  if (action.url) line(`  ${info(action.url)}`);
+  if (action.url) line(`  ${cyan(action.url)}`);
   await promptText("Press Enter when done");
 }
 
@@ -161,6 +183,6 @@ export function jsonOutput(value: unknown): void {
 
 export function errorOutput(error: unknown): void {
   const err = error as { code?: string; message?: string; hint?: string };
-  line(fail(`Error${err.code ? ` [${err.code}]` : ""}: ${err.message ?? String(error)}`));
+  line(red(`Error${err.code ? ` [${err.code}]` : ""}: ${err.message ?? String(error)}`));
   if (err.hint) line(dim(`  ${err.hint}`));
 }

@@ -35,6 +35,7 @@
     "@agent2llm/logger": "*",
     "@agent2llm/metrics": "*",
     "@agent2llm/orchestrator": "*",
+    "@agent2llm/pairs": "*",
     "@agent2llm/session": "*",
     "@agent2llm/transports": "*",
     "@agent2llm/tunnel": "*",

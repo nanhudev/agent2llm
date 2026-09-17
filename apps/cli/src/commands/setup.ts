@@ -119,6 +119,6 @@ export function runConfigSet(key: string, value: string): void {
   }
   const patch: Record<string, unknown> = { [key]: key === "maxIterations" ? Number.parseInt(value, 10) : value };
   patchMachineConfig(patch);
-  ui.ok(`${key} = ${value} ${ui.dim(`(${machineConfigPath()})`)}`);
+  ui.green(`${key} = ${value} ${ui.dim(`(${machineConfigPath()})`)}`);
   void loadMachineConfig;
 }

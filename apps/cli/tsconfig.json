@@ -63,6 +63,9 @@
       "path": "../../packages/orchestrator"
     },
     {
+      "path": "../../packages/pairs"
+    },
+    {
       "path": "../../packages/session"
     },
     {
