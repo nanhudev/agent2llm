@@ -22,6 +22,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { ICON_ICO_BASE64, ICON_PNG_BASE64 } from "../icon.assets.gen.js";
+import { runningInsideSea } from "../sea.js";
 import * as ui from "../ui.js";
 
 export interface ShortcutOptions {
@@ -88,27 +89,49 @@ function runPowerShell(script: string): { ok: boolean; stderr: string } {
   return { ok: result.status === 0, stderr: result.stderr ?? "" };
 }
 
-function resolveA2lCmd(): { target: string; arguments: string } {
-  // `where` is how the shell itself would resolve it; a .cmd hit is targetable
-  // directly by a .lnk (ShellExecute runs it through cmd for us).
+/**
+ * What the shortcut should run, best candidate first.
+ *
+ * 1. The npm shim found on PATH — it survives package updates and location
+ *    moves, so a machine where `a2l` resolves gets exactly that.
+ * 2. The SEA exe itself — a shortcut created by the packaged binary points
+ *    back at that binary, which is self-contained by construction.
+ * 3. Node running this CLI's entry file — the postinstall context knows both
+ *    node and the just-installed script, so this works even on a machine
+ *    whose Explorer PATH never sees npm's bin directory.
+ * 4. `cmd /c a2l dock` — the last resort that trusts double-click-time PATH.
+ *
+ * Order matters because the first that applies at creation time is frozen
+ * into the .lnk; a target that cannot resolve at double-click time produces
+ * a console error, which is exactly the experience this command exists to
+ * remove.
+ */
+async function resolveLaunchTarget(): Promise<{ target: string; arguments: string }> {
   try {
     const out = execFileSync("where.exe", ["a2l"], { encoding: "utf8", timeout: 15000 });
     const cmd = out.split(/\r?\n/).find((line) => line.trim().toLowerCase().endsWith(".cmd"));
     if (cmd) return { target: cmd.trim(), arguments: DESKTOP_LAUNCH_ARGS.join(" ") };
   } catch {
-    // Fall through to the PATH-based form below.
+    // where.exe failing just means npm's bin is not on this process's PATH;
+    // the self-contained candidates below do not need it.
   }
-  // No .cmd found: let cmd.exe resolve `a2l` at double-click time.
+  if (await runningInsideSea()) {
+    return { target: process.execPath, arguments: DESKTOP_LAUNCH_ARGS.join(" ") };
+  }
+  const entry = process.argv[1];
+  if (entry && /\.(mjs|js)$/i.test(entry) && fs.existsSync(entry)) {
+    return { target: process.execPath, arguments: `"${entry}" ${DESKTOP_LAUNCH_ARGS.join(" ")}` };
+  }
   return { target: path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "cmd.exe"), arguments: `/c a2l ${DESKTOP_LAUNCH_ARGS.join(" ")}` };
 }
 
-function createWindowsShortcut(artifacts: string[], skipped: ShortcutReport["skipped"]): void {
+async function createWindowsShortcut(artifacts: string[], skipped: ShortcutReport["skipped"]): Promise<void> {
   const { ico } = writeIcons();
   artifacts.push(ico, path.join(iconDir(), "dock.png"));
   const dir = shortcutDir();
   fs.mkdirSync(dir, { recursive: true });
   const lnk = path.join(dir, "Agent2LLM Dock.lnk");
-  const { target, arguments: args } = resolveA2lCmd();
+  const { target, arguments: args } = await resolveLaunchTarget();
   const q = (value: string): string => `'${value.replace(/'/g, "''")}'`;
   const script = [
     `$s = (New-Object -ComObject WScript.Shell).CreateShortcut(${q(lnk)})`,
@@ -218,7 +241,7 @@ export async function runDockShortcut(options: ShortcutOptions = {}): Promise<nu
       removeArtifact(report.artifacts, path.join(shortcutDir(), "Agent2LLM Dock.app"));
       removeArtifact(report.artifacts, path.join(shortcutDir(), "agent2llm-dock.desktop"));
     } else if (process.platform === "win32") {
-      createWindowsShortcut(report.artifacts, report.skipped);
+      await createWindowsShortcut(report.artifacts, report.skipped);
     } else if (process.platform === "darwin") {
       createMacApp(report.artifacts, report.skipped);
     } else {

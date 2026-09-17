@@ -11,6 +11,7 @@ import { CLI_PRIMARY_NAME } from "@agent2llm/config";
 import * as ui from "./ui.js";
 import { createRegistry, registerExternalAdapters } from "./registry.js";
 import { interactiveLauncher } from "./launcher.js";
+import { runningInsideSea } from "./sea.js";
 import { runDetect, runAdapters } from "./commands/detect.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runRun } from "./commands/run.js";
@@ -94,23 +95,6 @@ function parseArgs(argv: string[]): Flags {
 const str = (value: string | boolean | string[] | undefined): string | undefined =>
   typeof value === "string" ? value : undefined;
 const bool = (value: string | boolean | string[] | undefined): boolean => value === true || value === "true";
-
-/**
- * True inside the packaged SEA binary; plain `node` runs return false.
- *
- * A double-clicked exe has no terminal and nobody to interview, so the
- * interactive launcher's prompts would sit invisible and look like a hang.
- * Detection is wrapped because the node:sea module itself is only present
- * from Node 22.3 — a runtime without it is, by definition, not the SEA build.
- */
-async function runningInsideSea(): Promise<boolean> {
-  try {
-    const sea = (await import("node:sea")) as { isSea?: () => boolean };
-    return typeof sea.isSea === "function" && sea.isSea();
-  } catch {
-    return false;
-  }
-}
 
 async function main(): Promise<number> {
   const flags = parseArgs(process.argv.slice(2));
