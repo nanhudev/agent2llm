@@ -34,6 +34,9 @@ export function usage(): void {
   ui.line(ui.dim("      opens itself in an app-style window when Edge or Chrome is present,"));
   ui.line(ui.dim("      else the default browser (--no-open prints the URL instead). Loopback"));
   ui.line(ui.dim("      only, one-time token, and it never moves another app's window."));
+  ui.line(`    ${CLI_PRIMARY_NAME} dock shortcut [--remove]`);
+  ui.line(ui.dim("      Puts an icon on the desktop that starts the dock — created"));
+  ui.line(ui.dim("      automatically after a global npm install. --remove takes it away."));
   ui.line(ui.bold("    Brain / Hands (the original workflow)"));
   ui.line(`    ${CLI_PRIMARY_NAME} run --brain X --harness Y [--goal G] [--endpoint URL]`);
   ui.line(ui.dim("      [--ignore-auth] [--dry-run] [--max-iterations N] [--session ID]"));

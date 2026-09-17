@@ -35,10 +35,17 @@ const pkg = {
     agent2llm: "dist/agent2llm.mjs",
     a2l: "dist/agent2llm.mjs",
   },
-  files: ["dist", "AGENTS.md"],
+  files: ["dist", "AGENTS.md", "scripts/postinstall.mjs"],
   dependencies: deps,
   optionalDependencies: {
     playwright: "^1.63.0",
+  },
+  scripts: {
+    // One double-click after install: the postinstall puts an icon on the
+    // desktop (global installs only; CI and AGENT2LLM_NO_SHORTCUT=1 skip it,
+    // and it never fails the install). The command itself is the tested
+    // `a2l dock shortcut`, not a reimplementation.
+    postinstall: "node scripts/postinstall.mjs",
   },
   keywords: [
     "ai",
@@ -69,6 +76,7 @@ const pkg = {
 const STAGING_FILES = [
   "package.json",
   path.join("dist", "agent2llm.mjs"),
+  path.join("scripts", "postinstall.mjs"),
   "README.md",
   "LICENSE",
   "AGENTS.md",
@@ -77,9 +85,11 @@ for (const rel of STAGING_FILES) {
   await rm(path.join(staging, rel), { force: true });
 }
 await mkdir(path.join(staging, "dist"), { recursive: true });
+await mkdir(path.join(staging, "scripts"), { recursive: true });
 
 await writeFile(path.join(staging, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
 await cp(path.join(root, "dist", "agent2llm.mjs"), path.join(staging, "dist", "agent2llm.mjs"));
+await cp(path.join(root, "scripts", "postinstall.mjs"), path.join(staging, "scripts", "postinstall.mjs"));
 await cp(path.join(root, "docs", "pack-readme.md"), path.join(staging, "README.md"));
 await cp(path.join(root, "LICENSE"), path.join(staging, "LICENSE"));
 await cp(path.join(root, "AGENTS.md"), path.join(staging, "AGENTS.md"));

@@ -9,7 +9,8 @@ import { A2LError, isA2LError } from "@agent2llm/core";
 import { decideRunMode } from "@agent2llm/pairs";
 import { CLI_PRIMARY_NAME } from "@agent2llm/config";
 import * as ui from "./ui.js";
-import { createRegistry, registerExternalAdapters, RECOMMENDED_BRAIN_ORDER, RECOMMENDED_HARNESS_ORDER } from "./registry.js";
+import { createRegistry, registerExternalAdapters } from "./registry.js";
+import { interactiveLauncher } from "./launcher.js";
 import { runDetect, runAdapters } from "./commands/detect.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runRun } from "./commands/run.js";
@@ -27,7 +28,8 @@ import {
 import { runSetup, runPair, runUnpair, runLogs, runVersion, runConfigSet } from "./commands/setup.js";
 import { runReport } from "./commands/report.js";
 import { runDock } from "./commands/dock.js";
-import { BANNER, usage } from "./usage.js";
+import { runDockShortcut } from "./commands/dock-shortcut.js";
+import { usage } from "./usage.js";
 
 interface Flags {
   _: string[];
@@ -55,6 +57,7 @@ const BOOLEAN_FLAGS = new Set([
   "relay",
   "all",
   "no-open",
+  "remove",
 ]);
 
 function parseArgs(argv: string[]): Flags {
@@ -91,52 +94,6 @@ function parseArgs(argv: string[]): Flags {
 const str = (value: string | boolean | string[] | undefined): string | undefined =>
   typeof value === "string" ? value : undefined;
 const bool = (value: string | boolean | string[] | undefined): boolean => value === true || value === "true";
-
-async function interactiveLauncher(registry: ReturnType<typeof createRegistry>): Promise<number> {
-  ui.line(BANNER);
-  // Full probe: the launcher is the one screen a new user sees, and a harness
-  // listed as present with no version is what makes people think the install
-  // is broken. The launcher runs once, so the probe cost is paid once.
-  const detections = await registry.detectAll();
-  const byId = new Map(detections.map((d) => [d.id, d]));
-
-  const show = (ids: readonly string[], title: string): void => {
-    ui.heading(title);
-    for (const id of ids) {
-      const found = byId.get(id);
-      if (!found) continue;
-      const detected = found.detection.status === "detected" || found.detection.status === "verified";
-      ui.line(`  ${detected ? ui.MARK_OK : ui.MARK_NO} ${found.name}`);
-    }
-  };
-  show(RECOMMENDED_BRAIN_ORDER.filter((id) => id !== "mock-brain"), "Brains");
-  show(RECOMMENDED_HARNESS_ORDER.filter((id) => id !== "mock-harness"), "Harnesses");
-
-  const brain = await ui.promptChoice("Brain", RECOMMENDED_BRAIN_ORDER.filter((id) => byId.has(id)).map((id) => ({
-    label: byId.get(id)!.name,
-    value: id,
-    hint: byId.get(id)!.detection.status,
-  })));
-  const harness = await ui.promptChoice("Harness", RECOMMENDED_HARNESS_ORDER.filter((id) => byId.has(id)).map((id) => ({
-    label: byId.get(id)!.name,
-    value: id,
-    hint: byId.get(id)!.detection.status,
-  })));
-  const workflow = await ui.promptChoice("Workflow", [
-    { label: "Brain / Hands", value: "brain-hands", hint: "recommended" },
-    { label: "Peer", value: "peer" },
-    { label: "Planner only", value: "planner-only" },
-    { label: "Review only", value: "review-only" },
-    { label: "Harness autonomous", value: "harness-autonomous" },
-  ]);
-  const workspace = await ui.promptText("Workspace", process.cwd());
-  const goal = await ui.promptText("Goal");
-  if (goal === "") {
-    ui.warn("No goal supplied; nothing to do.");
-    return 0;
-  }
-  return runRun(registry, { brain, harness, workflow, workspace, goal });
-}
 
 async function main(): Promise<number> {
   const flags = parseArgs(process.argv.slice(2));
@@ -302,13 +259,20 @@ async function main(): Promise<number> {
         return 0;
 
       case "dock":
-        // No --host: a flag that turns a loopback page into a network service
-        // turns a local convenience into somebody else's remote execution
-        // endpoint. The page opens automatically instead of waiting for the
-        // user to click a printed URL (--no-open keeps the old behaviour);
-        // opening creates its own browser frame and never touches a window
-        // the dock does not own, which is the property the dock's security
-        // posture is built on.
+        // `dock shortcut` puts an icon on the desktop that starts the dock;
+        // everything else is the dock itself. No --host: a flag that turns a
+        // loopback page into a network service turns a local convenience into
+        // somebody else's remote execution endpoint. The page opens
+        // automatically instead of waiting for the user to click a printed URL
+        // (--no-open keeps the old behaviour); opening creates its own browser
+        // frame and never touches a window the dock does not own, which is the
+        // property the dock's security posture is built on.
+        if (rest[0] === "shortcut") {
+          return runDockShortcut({
+            ...(bool(flags.remove) ? { remove: true } : {}),
+            json,
+          });
+        }
         return runDock(registry, {
           ...(str(flags.port) ? { port: Number.parseInt(str(flags.port)!, 10) } : {}),
           ...(str(flags.workspace) ? { workspace: str(flags.workspace) } : {}),
