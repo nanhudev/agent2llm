@@ -21,6 +21,7 @@
     "@agent2llm/core": "*",
     "@agent2llm/detect": "*",
     "@agent2llm/protocol": "*",
-    "@agent2llm/transports": "*"
+    "@agent2llm/transports": "*",
+    "@agent2llm/execution": "*"
   }
 }

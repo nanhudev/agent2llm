@@ -137,15 +137,6 @@ export class CursorHarnessAdapter extends CliHarnessAdapter {
     return args;
   }
 
-  private renderTask(task: ExecutionRequest): string {
-    return [
-      `Goal: ${task.goal}`,
-      "",
-      "Steps:",
-      ...task.instructions.map((instruction, index) => `${index + 1}. ${instruction}`),
-      ...(task.successCriteria ? ["", `Success criteria: ${task.successCriteria}`] : []),
-    ].join("\n");
-  }
 
   protected extractSessionRef(line: string): string | null {
     const json = parseJsonLine(line);

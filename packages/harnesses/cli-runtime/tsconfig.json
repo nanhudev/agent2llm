@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../execution"
+    },
+    {
       "path": "../../adapter-sdk"
     },
     {

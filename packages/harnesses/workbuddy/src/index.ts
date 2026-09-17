@@ -144,16 +144,17 @@ export class WorkBuddyHarnessAdapter extends CliHarnessAdapter {
     return args;
   }
 
-  private renderTask(task: ExecutionRequest): string {
-    return [
-      `Goal: ${task.goal}`,
-      "",
-      "Steps:",
-      ...task.instructions.map((instruction, index) => `${index + 1}. ${instruction}`),
-      ...(task.successCriteria ? ["", `Success criteria: ${task.successCriteria}`] : []),
-      "",
-      "Work only inside the current workspace. Report what you changed and the test result at the end.",
-    ].join("\n");
+  /**
+   * WorkBuddy's house rule, layered on the shared brief.
+   *
+   * Skipped in execution-only mode: the relay policy is set by the Brain, and
+   * "report what you changed at the end" is the opposite of not producing a
+   * report. The evidence for a relay dispatch comes from Agent2LLM reading the
+   * repository, not from the harness writing prose.
+   */
+  protected override extraBriefLines(task: ExecutionRequest): string {
+    if (task.executionMode === "execution-only") return "";
+    return "\n\nWork only inside the current workspace. Report what you changed and the test result at the end.";
   }
 
   protected extractSessionRef(line: string): string | null {

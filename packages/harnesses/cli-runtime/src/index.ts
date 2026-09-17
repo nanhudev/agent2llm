@@ -10,8 +10,10 @@
 import { emptyManifest, type CapabilityManifest } from "@agent2llm/protocol";
 import { harnessUnavailable } from "@agent2llm/core";
 import { locateBinary, readVersion, type BinaryLocation } from "@agent2llm/detect";
+import { renderExecutionBrief } from "@agent2llm/execution";
 import { helpMentions, readHelp, runProcess, type RunningProcess, type RunOutcome } from "@agent2llm/transports";
-import { meaningfulLine, type ExecutionAccumulator } from "./helpers.js";
+import { summarizeOutcome } from "./outcome.js";
+import type { ExecutionAccumulator } from "./helpers.js";
 import {
   BaseHarnessAdapter,
   type AdapterMetadata,
@@ -212,6 +214,24 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
   /** argv for one execution round. Must not invent flags: check `hasFlag`. */
   protected abstract buildArgs(task: ExecutionRequest, session: HarnessSession): string[];
 
+  /**
+   * The brief for one dispatch.
+   *
+   * Every CLI harness renders it the same way, and its *shape* is the product
+   * decision: an `execution-only` dispatch carries one step and its acceptance
+   * criteria, not a goal and a plan. It lives here because each adapter used to
+   * carry its own copy, which would have meant switching Relay Mode on six
+   * times — or having it work for one product and silently not the others.
+   */
+  protected renderTask(task: ExecutionRequest): string {
+    return renderExecutionBrief(task) + this.extraBriefLines(task);
+  }
+
+  /** Product-specific additions. Empty by default; see WorkBuddy for an example. */
+  protected extraBriefLines(_task: ExecutionRequest): string {
+    return "";
+  }
+
   /** Map one output line to a normalized event, or null to ignore it. */
   protected abstract parseLine(line: string): HarnessEvent | null;
 
@@ -356,16 +376,8 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
   }
 
   /**
-   * One sentence the Brain can act on.
-   *
-   * Order matters. A structured failure beats everything: it is the harness
-   * saying what went wrong, in its own vocabulary. A timeout is next. Only
-   * then does the last line of output get a turn, and even then it is worth
-   * checking that it is prose rather than the middle of a JSON blob — a
-   * truncated serialisation reads as noise to a reviewer.
-   *
-   * On success the last line is usually the agent's own final message, which
-   * is exactly what we want to hand over.
+   * One sentence the Brain can act on. Overridable so a product can rephrase
+   * it; the decision table itself is in `summarizeOutcome`.
    */
   protected summarize(
     outcome: RunOutcome,
@@ -373,20 +385,12 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
     firstFailure: string | null,
     lastText: string
   ): string {
-    if (outcome.timedOut) {
-      return `${this.profile.name} timed out after ${Math.round(outcome.durationMs / 1000)}s.`;
-    }
-    if (firstFailure) return firstFailure.slice(0, 500);
-    if (outcome.exitCode === 0) {
-      return (lastText || `${this.profile.name} finished successfully.`).slice(0, 500);
-    }
-    const readable = meaningfulLine(lastText);
-    if (readable) return readable.slice(0, 500);
-    return `${this.profile.name} failed with exit code ${acc.exitStatus} and produced no readable message.`;
+    return summarizeOutcome(this.profile.name, outcome, acc, firstFailure, lastText);
   }
 }
-
-// Line-level helpers live in their own module to keep this file inside the
-// project's line budget. Re-exported because every harness adapter imports them
-// from this package's entry point.
+// Line helpers and the outcome/brief decisions live in their own modules to keep
+// this file inside the project's line budget, and are re-exported because every
+// harness adapter imports them from this package's entry point.
 export { meaningfulLine, parseJsonLine, stripAnsi, type ExecutionAccumulator } from "./helpers.js";
+export { renderTaskFor, summarizeOutcome } from "./outcome.js";
+
