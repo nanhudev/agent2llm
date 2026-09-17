@@ -61,7 +61,21 @@ const pkg = {
   homepage: "https://github.com/nanhudev/agent2llm#readme",
 };
 
-await rm(staging, { recursive: true, force: true });
+// Clear exactly the files this script writes, one path at a time, rather than
+// removing the whole staging directory. The contents are known, so enumerating
+// them is not a compromise: it removes any chance of a stale file surviving
+// (an unlinked directory can leave one behind when the delete is refused), and
+// it does not need a recursive delete, which some machines decline to grant.
+const STAGING_FILES = [
+  "package.json",
+  path.join("dist", "agent2llm.mjs"),
+  "README.md",
+  "LICENSE",
+  "AGENTS.md",
+];
+for (const rel of STAGING_FILES) {
+  await rm(path.join(staging, rel), { force: true });
+}
 await mkdir(path.join(staging, "dist"), { recursive: true });
 
 await writeFile(path.join(staging, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);

@@ -16,7 +16,13 @@ import { rm, stat } from "node:fs/promises";
 
 const OUT = "dist/agent2llm.mjs";
 
-await rm("dist", { recursive: true, force: true });
+// Clear the one file this script writes instead of removing the directory.
+// esbuild emits exactly one output here, so a recursive delete of `dist` buys
+// nothing — and it is refused outright on machines that will not grant it
+// (a handle held inside the tree, or a sandbox that declines bulk deletes),
+// which used to fail the whole bundle over leftover output that was about to
+// be overwritten anyway.
+await rm(OUT, { force: true });
 
 const result = await build({
   entryPoints: ["apps/cli/dist/index.js"],
