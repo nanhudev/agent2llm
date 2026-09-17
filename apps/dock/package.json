@@ -16,5 +16,7 @@
   "files": [
     "dist"
   ],
-  "dependencies": {}
+  "dependencies": {
+    "@agent2llm/config": "*"
+  }
 }

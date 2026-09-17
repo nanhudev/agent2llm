@@ -8,5 +8,9 @@
     "src/index.ts",
     "src/assets.gen.ts"
   ],
-  "references": []
+  "references": [
+    {
+      "path": "../../packages/config"
+    }
+  ]
 }

@@ -8,6 +8,13 @@ All notable changes are documented here. Format follows
 
 ### Changed
 
+- **`a2l` is the command the product prints.** Help text, first-run hints and
+  the deprecation notices now say `a2l …`; the full `agent2llm` spelling
+  remains a working binary. Product identity is centralized in
+  `@agent2llm/config` (`PRODUCT_NAME`, `PRODUCT_SHORT_NAME`, `CLI_PRIMARY_NAME`,
+  `LEGACY_NAMES`), so a future rename is a constants change rather than a hunt
+  through every file. The `a2l/1` protocol, state directories and persisted
+  identifiers are untouched.
 - **Device pairing moved under the bridge namespace.** The word "pair" named
   two unrelated things: the Brain×Harness Pair that Relay Mode runs through,
   and workspace-vs-bridge device pairing that only shared the vocabulary.

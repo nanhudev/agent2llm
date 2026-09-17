@@ -17,6 +17,7 @@
  */
 import type { AdapterRegistry } from "@agent2llm/adapter-sdk";
 import { CONTEXT_MODES } from "@agent2llm/pairs";
+import { CLI_PRIMARY_NAME } from "@agent2llm/config";
 import {
   ensurePair,
   findPairByIdentity,
@@ -50,7 +51,7 @@ export async function runPairList(options: { json?: boolean } = {}): Promise<num
   }
   if (pairs.length === 0) {
     ui.line("  No pairs yet.");
-    ui.line(ui.dim(`  ${ui.bold("a2l pair create --brain chatgpt-web --harness codex")}`));
+    ui.line(ui.dim(`  ${ui.bold(`${CLI_PRIMARY_NAME} pair create --brain chatgpt-web --harness codex`)}`));
     return 0;
   }
   ui.heading("Pairs");

@@ -14,6 +14,7 @@
  * server sets no cookies at all: a credential that only exists in a document
  * the user opened themselves is not reachable by another origin.
  */
+import { CLI_PRIMARY_NAME, PRODUCT_NAME } from "@agent2llm/config";
 import { DOCK_CSS, DOCK_JS } from "./assets.gen.js";
 
 export interface DockPageInput {
@@ -38,18 +39,21 @@ export function renderDockPage(input: DockPageInput): string {
   // is the one place a future change to its alphabet would become an XSS, so
   // the guard is written down rather than assumed.
   const tokenLiteral = JSON.stringify(input.token).replace(/</g, "\\u003c");
+  // The client's one piece of command advice is injected, not hard-coded, so a
+  // rename of the CLI spelling cannot leave the page recommending the old name.
+  const hints = JSON.stringify({ createCommand: `${CLI_PRIMARY_NAME} pair create --brain X --harness Y` });
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent2LLM Dock</title>
+<title>${PRODUCT_NAME} Dock</title>
 <style>
 ${DOCK_CSS}</style>
 </head>
 <body>
 <main>
-  <h1>Agent2LLM Dock</h1>
+  <h1>${PRODUCT_NAME} Dock</h1>
   <div class="sub">
     <span class="pill">v${version}</span>
     <span class="pill">loopback only</span>
@@ -73,7 +77,7 @@ ${DOCK_CSS}</style>
 </main>
 <script>
 ${DOCK_JS}
-__a2l_dock.init(${tokenLiteral});
+__a2l_dock.init(${tokenLiteral}, ${hints});
 </script>
 </body>
 </html>

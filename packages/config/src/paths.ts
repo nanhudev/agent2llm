@@ -67,9 +67,32 @@ export function removeIfExists(file: string): void {
 
 export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 47621;
+
+/**
+ * Product identity, in one place.
+ *
+ * A future brand rename edits these constants and nothing else in code — no
+ * hunting through files that print a name. Three things a rename must NOT
+ * touch, because they are compatibility surfaces others may already depend on:
+ * the `a2l/1` protocol string, the `a2l`-prefixed persisted identifiers
+ * (sessions, pairs, runs), and the state directory layout.
+ */
 export const PRODUCT_NAME = "Agent2LLM";
-export const CLI_NAME = "agent2llm";
-export const CLI_ALIAS = "a2l";
+/** The short human-facing form of the product name, for prose and tight UI. */
+export const PRODUCT_SHORT_NAME = "A2L";
+/** The command users are told to type. The legacy names keep working as bins. */
+export const CLI_PRIMARY_NAME = "a2l";
+/** Binaries that still resolve but are no longer the recommended spelling. */
+export const LEGACY_NAMES: readonly string[] = ["agent2llm"];
+
+/**
+ * The full-name binary. Superseded by {@link CLI_PRIMARY_NAME} for anything a
+ * user reads; kept so `version` can report which binary is actually running.
+ */
+export const CLI_NAME = LEGACY_NAMES[0];
+/** Kept for existing imports; the primary spelling is {@link CLI_PRIMARY_NAME}. */
+export const CLI_ALIAS = CLI_PRIMARY_NAME;
+
 /**
  * What the CLI reports as its version.
  *

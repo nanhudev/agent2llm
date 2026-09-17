@@ -35,6 +35,8 @@ function byId(id: string): HTMLElement {
 }
 
 let token = "";
+/** How to make a first Pair; the page's bootstrap injects the current spelling. */
+let createCommand = "a2l pair create --brain X --harness Y";
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${path}?token=${encodeURIComponent(token)}`, {
@@ -98,7 +100,7 @@ function render(state: DockState): void {
   const host = byId("pairs");
   host.innerHTML = state.pairs.length
     ? state.pairs.map(pairCard).join("")
-    : '<div class="card empty">No pairs yet. Create one with <code>a2l pair create --brain X --harness Y</code>.</div>';
+    : `<div class="card empty">No pairs yet. Create one with <code>${esc(createCommand)}</code>.</div>`;
 
   const runs = byId("runs");
   runs.className = state.runs.length ? "" : "empty";
@@ -175,7 +177,8 @@ document.addEventListener("click", async (event) => {
 });
 
 /** Called once by the page's inline bootstrap with the one-time token. */
-export function init(value: string): void {
+export function init(value: string, hints?: { createCommand?: string }): void {
   token = value;
+  if (hints?.createCommand) createCommand = hints.createCommand;
   void boot();
 }

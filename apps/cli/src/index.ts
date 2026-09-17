@@ -7,7 +7,7 @@
  */
 import { A2LError, isA2LError } from "@agent2llm/core";
 import { decideRunMode } from "@agent2llm/pairs";
-import { CLI_NAME } from "@agent2llm/config";
+import { CLI_PRIMARY_NAME } from "@agent2llm/config";
 import * as ui from "./ui.js";
 import { createRegistry, registerExternalAdapters, RECOMMENDED_BRAIN_ORDER, RECOMMENDED_HARNESS_ORDER } from "./registry.js";
 import { runDetect, runAdapters } from "./commands/detect.js";
@@ -264,7 +264,7 @@ async function main(): Promise<number> {
           await runUnpair(rest[1]);
           return 0;
         }
-        ui.line(`  Usage: ${CLI_NAME} bridge pair <workspace> | ${CLI_NAME} bridge unpair [workspace]`);
+        ui.line(`  Usage: ${CLI_PRIMARY_NAME} bridge pair <workspace> | ${CLI_PRIMARY_NAME} bridge unpair [workspace]`);
         return 2;
       }
 
@@ -287,13 +287,13 @@ async function main(): Promise<number> {
         // Anything else is a workspace path — the legacy device-pairing
         // spelling. It keeps working so nothing breaks, but it says where the
         // command moved, because a silent alias is how the ambiguity got here.
-        ui.warn(`Device pairing is now \`${CLI_NAME} bridge pair <workspace>\`. The old spelling still works but is deprecated.`);
+        ui.warn(`Device pairing is now \`${CLI_PRIMARY_NAME} bridge pair <workspace>\`. The old spelling still works but is deprecated.`);
         await runPair(sub);
         return 0;
       }
 
       case "unpair":
-        ui.warn(`Device unpairing is now \`${CLI_NAME} bridge unpair [workspace]\`. The old spelling still works but is deprecated.`);
+        ui.warn(`Device unpairing is now \`${CLI_PRIMARY_NAME} bridge unpair [workspace]\`. The old spelling still works but is deprecated.`);
         await runUnpair(rest[0]);
         return 0;
 

@@ -12,6 +12,7 @@
  */
 import path from "node:path";
 import { newId } from "@agent2llm/core";
+import { CLI_PRIMARY_NAME } from "@agent2llm/config";
 import type { AdapterRegistry } from "@agent2llm/adapter-sdk";
 import {
   CONTEXT_MODES,
@@ -205,7 +206,7 @@ export function selectPair(
   if (!active) {
     return {
       pair: null,
-      error: "No pairs yet. Create one with 'a2l pair create --brain <id> --harness <id>'.",
+      error: `No pairs yet. Create one with '${CLI_PRIMARY_NAME} pair create --brain <id> --harness <id>'.`,
     };
   }
   return { pair: active };
