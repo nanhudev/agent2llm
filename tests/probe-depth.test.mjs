@@ -36,7 +36,12 @@ test("probe-depth", "a quick detect does not claim a flag surface it never read"
 
 test("probe-depth", "reading capabilities forces the full probe", async () => {
   const adapter = createCodexHarness();
-  await adapter.detect({ quick: true });
+  const quick = await adapter.detect({ quick: true });
+  // The pinned rule only exists where there is a binary to probe. Every other
+  // test in this file guards on detection status; this one did not, so CI —
+  // where no Codex CLI is installed — read a manifest with no version in it
+  // and failed on an assertion about a machine state it never had.
+  if (quick.status !== "detected") return;
 
   // The manifest is what `agent2llm adapters` / `doctor` print, so asking for
   // it is the signal that a real answer is now required.

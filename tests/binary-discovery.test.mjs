@@ -67,6 +67,10 @@ test("binary-discovery", "a candidate path is preferred over a PATH lookup miss"
   const dir = scratch("candidate");
   const fake = path.join(dir, `probe-${process.pid}.exe`);
   fs.writeFileSync(fake, "not a real program");
+  // Windows treats any regular file as executable, POSIX does not: without an
+  // x bit `isExecutable` rightly refuses the candidate and this test would
+  // only ever pass on the author's platform. chmod is a no-op on Windows.
+  if (process.platform !== "win32") fs.chmodSync(fake, 0o755);
 
   const found = await locateBinary(`definitely-absent-${process.pid}`, {
     candidates: [fake],
