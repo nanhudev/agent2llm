@@ -92,7 +92,9 @@ agent2llm run --brain mock-brain --harness mock-harness --goal smoke
   a coding agent executes. Capability-checked, not convention: no harness
   can declare \`plan.generate\` or \`review.perform\`.
 - **\`agent2llm report\`** — what the Brain's tokens actually cost, per session
-  and per phase. The harness side is 0 brain tokens by construction.
+  and per phase. Harness-side model usage is not shown unless a harness
+  adapter reports it; Agent2LLM cannot see inside a harness, so that figure is
+  unknown there rather than zero.
 - **Window attach** — drives a Chromium window (including a desktop build)
   that is already open and signed in, over the DevTools protocol.
 - **\`AGENTS.md\`** — a runbook so an AI agent can install this correctly.

@@ -136,9 +136,11 @@ export interface UsageSummary {
 /**
  * Aggregates entries into the numbers a report prints.
  *
- * The Harness contributes nothing here by construction: it has no
- * `plan.generate` / `review.perform` capability, so it never appears in a
- * usage file. That absence is the measurement, not an omission.
+ * The only rows that can appear are ones a Brain's provider reported. A Harness
+ * does not appear in one — not because it spends nothing, but because its own
+ * model usage is not observable from outside: it may well be running its own
+ * model on its own subscription while it executes. The absence of a Harness row
+ * is therefore an absence of data, and must never be read as a measured zero.
  */
 export function summarizeUsage(sessions: { entries: UsageEntry[] }[]): UsageSummary {
   const phases: Record<UsagePhase, number> = { inspect: 0, plan: 0, review: 0, revise: 0, other: 0 };

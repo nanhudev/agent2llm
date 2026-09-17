@@ -6,6 +6,20 @@ All notable changes are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Usage terminology: harness model usage is unknown, not zero.** The 0.2.0
+  notes said the harness side of every run is "0 brain tokens by construction,
+  because execution never consults a model". Agent2LLM cannot know that: a
+  harness such as Codex, Cursor or Claude Code may be running its own model on
+  its own subscription while it executes, and nothing in the protocol lets
+  Agent2LLM observe it. `agent2llm report` now says harness usage is not shown
+  unless an adapter reports it, and run metrics carry a `harnessUsage` field
+  (`null` = unreported) alongside the Brain's, so a future harness that does
+  report trustworthy provider usage has somewhere honest to put it rather than
+  a default of 0. The 0.2.0 text below is left exactly as it was written — it
+  records what that release said, and this entry records why it was wrong.
+
 ## [0.2.0] — 2026-09-17
 
 Everything below this heading was written after the 0.1.0 tag and is shipping

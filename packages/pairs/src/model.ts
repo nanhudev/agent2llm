@@ -93,14 +93,21 @@ export const STANDARD_EXECUTION_POLICY: ExecutionPolicy = executionPolicySchema.
 // ---- Token accounting -------------------------------------------------------
 
 /**
- * What a Brain actually spent, as far as it can be known.
+ * What one side actually spent, as far as it can be known.
  *
  * Provider-reported numbers are the only ones allowed to be called tokens. A
  * web Brain is subscription-metered and reports nothing, so it says
  * `unavailable` with a reason. Nothing is ever estimated into this field: that
  * is what `TextSize` in the run metrics is for, and it is labelled separately.
+ *
+ * This serves the Harness as well as the Brain, which is the whole point of
+ * moving the word "brain" out of its name. Agent2LLM cannot see inside a
+ * Harness: Codex, Cursor, Claude Code and the rest may spend their own model
+ * budget, on their own subscription, executing the step they were handed. That
+ * is not zero — it is *unknown*, and `null` (nothing reported) must be shown
+ * as "unavailable" rather than as a 0 a reader would take for a measurement.
  */
-export const brainTokenAccountingSchema = z.discriminatedUnion("source", [
+export const usageAccountingSchema = z.discriminatedUnion("source", [
   z.object({
     source: z.literal("provider-reported"),
     promptTokens: z.number().int().nonnegative(),
@@ -114,7 +121,7 @@ export const brainTokenAccountingSchema = z.discriminatedUnion("source", [
   }),
 ]);
 
-export type BrainTokenAccounting = z.infer<typeof brainTokenAccountingSchema>;
+export type UsageAccounting = z.infer<typeof usageAccountingSchema>;
 
 /** Byte/conservative-estimate sizes. Never presented as billed tokens. */
 export const textSizeSchema = z.object({
@@ -142,7 +149,16 @@ export const runMetricsSchema = z.object({
   /** `null` means no test command reported a number — not zero. */
   testsPassed: z.number().int().nonnegative().nullable().default(null),
   revisions: z.number().int().nonnegative().default(0),
-  brainTokens: brainTokenAccountingSchema.nullable().default(null),
+  /** The Brain's provider usage, or why it is unknown. */
+  brainTokens: usageAccountingSchema.nullable().default(null),
+  /**
+   * What the Harness spent executing, when a Harness adapter reports it.
+   *
+   * `null` is the honest default and means nothing was reported — which is the
+   * normal case, because a Harness's own model usage is not something
+   * Agent2LLM can observe from outside. It must never be rendered as 0.
+   */
+  harnessUsage: usageAccountingSchema.nullable().default(null),
   /** Everything Agent2LLM actually sent the Harness across the run. */
   harnessInstruction: textSizeSchema.default({ bytes: 0, estimatedTextTokens: 0 }),
   harnessResponse: textSizeSchema.default({ bytes: 0, estimatedTextTokens: 0 }),
@@ -287,6 +303,7 @@ export const runRecordSchema = z.object({
     testsPassed: null,
     revisions: 0,
     brainTokens: null,
+    harnessUsage: null,
     harnessInstruction: { bytes: 0, estimatedTextTokens: 0 },
     harnessResponse: { bytes: 0, estimatedTextTokens: 0 },
     evidenceRaw: { bytes: 0, estimatedTextTokens: 0 },

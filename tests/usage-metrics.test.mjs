@@ -1,15 +1,19 @@
 /**
  * Usage metrics.
  *
- * The Brain is the only side that spends tokens, so its turns are what the
- * report prints. These tests cover the phase mapping (state -> what the model
- * spent tokens on), the JSONL round-trip, aggregation, the estimate rule,
- * and the guarantee that metrics can never fail a run.
+ * The Brain's provider usage is the only usage Agent2LLM can measure, so that
+ * is what the report prints — and what it deliberately does not print is a
+ * harness figure, because a harness's own model spend is not observable from
+ * outside. These tests cover the phase mapping (state -> what the model spent
+ * tokens on), the JSONL round-trip, aggregation, the estimate rule, the
+ * guarantee that metrics can never fail a run, and the rule that an
+ * unreported figure is shown as unknown rather than as zero.
  */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { test, assertEqual } from "@agent2llm/testing";
+import { spawnSync } from "node:child_process";
+import { test, assert, assertEqual } from "@agent2llm/testing";
 import {
   estimateTokens,
   phaseForState,
@@ -18,7 +22,11 @@ import {
   recordBrainUsage,
   summarizeUsage,
 } from "@agent2llm/metrics";
+import { emptyRunMetrics } from "@agent2llm/pairs";
 import { report } from "./_report.mjs";
+
+const ROOT = path.resolve(import.meta.dirname, "..");
+const CLI = path.join(ROOT, "apps", "cli", "dist", "index.js");
 
 const FIXTURE_STATE = fs.mkdtempSync(path.join(os.tmpdir(), "a2l-usage-"));
 const STATE_A = path.join(FIXTURE_STATE, "a");
@@ -110,6 +118,34 @@ test("usage-metrics", "recording never fails a run when the state directory is u
 test("usage-metrics", "empty sessions are not listed", () => {
   use(STATE_B);
   assertEqual(readAllUsage().length, 0);
+});
+
+test("usage-metrics", "harness model usage is an unknown, not a zero", () => {
+  // A harness (Codex, Cursor, Claude Code) may spend its own model budget
+  // while it executes, and Agent2LLM cannot observe that from outside. The
+  // metric therefore starts unreported, and the report has to say so.
+  const metrics = emptyRunMetrics();
+  assertEqual(metrics.harnessUsage, null, "nothing reported means unreported");
+  assertEqual(metrics.brainTokens, null, "and the Brain's side behaves the same way");
+});
+
+test("usage-metrics", "the report never converts unreported harness usage into a figure", () => {
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), "a2l-report-"));
+  use(state);
+  // A session with recorded Brain usage, so the report prints its full body
+  // rather than returning early on "no usage recorded yet".
+  recordBrainUsage(entry({ sessionId: "s-report" }));
+  const result = spawnSync(process.execPath, [CLI, "report"], {
+    encoding: "utf8",
+    cwd: ROOT,
+    env: { ...process.env, AGENT2LLM_STATE_DIR: state, NO_COLOR: "1" },
+  });
+  const out = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  assertEqual(result.status, 0, `report must run: ${out.slice(-400)}`);
+  assert(!/0 brain tokens/.test(out), `the old false claim is gone, got: ${out}`);
+  assert(!/never consults a model/.test(out), `and no implication of structural zero: ${out}`);
+  assert(/Harness usage is not shown/.test(out), "it names what is missing instead");
+  assert(/unknown, not zero/.test(out), `and states the difference: ${out}`);
 });
 
 await report();

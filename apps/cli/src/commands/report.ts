@@ -1,14 +1,15 @@
 /**
  * `agent2llm report` — what the Brain actually spent.
  *
- * This is the measurement behind the architecture's claim: the Brain is the
- * only side that burns tokens, and it only thinks during inspect / plan /
- * review. The Harness executes without consulting a model, which is why it
- * never appears in a usage file — that absence is the number.
+ * The Brain's provider usage is the only usage here, because it is the only
+ * usage Agent2LLM can measure. The Harness is *absent*, not zero: a harness
+ * such as Codex or Cursor may be running its own model on its own subscription
+ * while it executes, and nothing in the protocol lets Agent2LLM observe that.
+ * Unknown is reported as unknown.
  *
  * Web Brains (ChatGPT, Claude in a browser) are subscription-metered and
- * report nothing, so they contribute nothing here. No estimate is invented
- * for them; the report only prints what a provider actually billed.
+ * report nothing, so they contribute nothing here either. No estimate is
+ * invented for them; the report only prints what a provider actually billed.
  */
 import { readAllUsage, summarizeUsage } from "@agent2llm/metrics";
 import * as ui from "../ui.js";
@@ -52,8 +53,8 @@ export function runReport(options: { json?: boolean } = {}): void {
   ui.line(`    completion    ${summary.completionTokens.toLocaleString()} tok`);
   ui.line(`    phases        ${describePhases(summary.phases)}`);
   ui.line("");
-  ui.line(ui.dim("The harness side of these runs spent 0 brain tokens by construction:"));
-  ui.line(ui.dim("execution never consults a model, so no usage exists to record."));
+  ui.line(ui.dim("Harness usage is not shown, because no harness adapter reported any."));
+  ui.line(ui.dim("A harness may spend its own model budget Agent2LLM cannot see. That is unknown, not zero."));
 }
 
 function describePhases(phases: Record<string, number>): string {
