@@ -13,6 +13,7 @@ import { locateBinary, readVersion, type BinaryLocation } from "@agent2llm/detec
 import { renderExecutionBrief } from "@agent2llm/execution";
 import { helpMentions, readHelp, runProcess, type RunningProcess, type RunOutcome } from "@agent2llm/transports";
 import { summarizeOutcome } from "./outcome.js";
+import type { CliHarnessProfile } from "./profile.js";
 import type { ExecutionAccumulator } from "./helpers.js";
 import {
   BaseHarnessAdapter,
@@ -24,32 +25,6 @@ import {
   type HarnessEvent,
   type HarnessSession,
 } from "@agent2llm/adapter-sdk";
-
-export interface CliHarnessProfile {
-  id: string;
-  name: string;
-  bin: string;
-  /** Alternate binary names (e.g. `agent` for `cursor-agent`). */
-  altBins?: readonly string[];
-  vendor?: string;
-  homepage?: string;
-  /** Extra installation locations probed beyond PATH. */
-  candidates?: readonly string[];
-  /**
-   * Product-owned directories holding versioned binaries; the newest match for
-   * `versionedPattern` wins. Codex Desktop stages its CLI this way.
-   */
-  versionedDirs?: readonly string[];
-  versionedPattern?: RegExp;
-  /**
-   * Subcommand whose `--help` advertises the real flag surface, when the
-   * top-level help only points at subcommands (e.g. `codex exec --help`).
-   */
-  helpSubcommand?: string;
-  experimental?: boolean;
-  /** Product this adapter drives, shown by `agent2llm adapters`. */
-  drives?: string;
-}
 
 export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
   protected location: BinaryLocation | null = null;
@@ -256,12 +231,17 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
   }
 
   async execute(session: HarnessSession, task: ExecutionRequest): Promise<ExecutionHandle> {
-    const bin = this.requireBinary();
-    // The argv is built from probed flags, so make sure they were probed. A
-    // run that skipped this dropped `--json` and then could not parse its own
-    // output, which reads as "the harness produced nothing" rather than as the
-    // missing probe it actually was.
+    // Discovery comes first, and that ordering is the whole bug this fixes.
+    // `requireBinary()` is what reports "not installed or not on PATH", and it
+    // can only be right if something has looked. brain-hands looked by
+    // accident: `assertCompatible` asks for `capabilities()`, which discovers on
+    // demand. Relay Mode negotiates no capabilities — the pair's policy is the
+    // contract — so nothing looked, and every dispatch against a real harness
+    // failed with an install error for a binary `agent2llm detect` names by
+    // path. `resolveFlags()` is the same call that probes the flag surface,
+    // which the argv depends on anyway, so the fix costs nothing.
     await this.resolveFlags();
+    const bin = this.requireBinary();
     const handleId = `${this.profile.id}-${task.taskId}-${task.iteration}-${Date.now()}`;
     const args = this.buildArgs(task, session);
     const proc = runProcess({
@@ -393,4 +373,5 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
 // harness adapter imports them from this package's entry point.
 export { meaningfulLine, parseJsonLine, stripAnsi, type ExecutionAccumulator } from "./helpers.js";
 export { renderTaskFor, summarizeOutcome } from "./outcome.js";
+export type { CliHarnessProfile } from "./profile.js";
 
