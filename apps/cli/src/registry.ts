@@ -17,6 +17,7 @@ import { createCodexHarness } from "@agent2llm/harness-codex";
 import { createCursorHarness } from "@agent2llm/harness-cursor";
 import { createClaudeCodeHarness } from "@agent2llm/harness-claude-code";
 import { createOpenCodeHarness } from "@agent2llm/harness-opencode";
+import { createZCodeHarness } from "@agent2llm/harness-zcode";
 
 export function createRegistry(): AdapterRegistry {
   const registry = new AdapterRegistry();
@@ -32,6 +33,7 @@ export function createRegistry(): AdapterRegistry {
     createCursorHarness(),
     createClaudeCodeHarness(),
     createOpenCodeHarness(),
+    createZCodeHarness(),
   ]);
   return registry;
 }

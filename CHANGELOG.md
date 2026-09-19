@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- ZCode Harness availability adapter: bounded Desktop presence checks, no redistributed runtime, and explicit refusal until an external execution contract is verified. No execution, resume, authentication or workspace capability is claimed.
+
 All notable changes are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/).

@@ -41,6 +41,7 @@
     "@agent2llm/transports": "*",
     "@agent2llm/tunnel": "*",
     "@agent2llm/workspace": "*",
-    "commander": "^14.0.0"
+    "commander": "^14.0.0",
+    "@agent2llm/harness-zcode": "*"
   }
 }
