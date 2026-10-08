@@ -55,6 +55,7 @@ export function usage(): void {
   ui.line(ui.dim(`      (The old ${CLI_PRIMARY_NAME} pair <workspace> / unpair spelling still works, deprecated.)`));
   ui.line(`    ${CLI_PRIMARY_NAME} logs [--json] [--lines N]`);
   ui.line(`    ${CLI_PRIMARY_NAME} report [--json]`);
+  ui.line(`    ${CLI_PRIMARY_NAME} compare <baseline-run-id> <candidate-run-id> [--json]`);
   ui.line(`    ${CLI_PRIMARY_NAME} config [--json] | config set <key> <value>`);
   ui.line(`    ${CLI_PRIMARY_NAME} version`);
   ui.line();

@@ -3,11 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- Standalone desktop workbench with official ChatGPT OAuth, reviewed execution steps, protected credentials, native Codex runtime, and Windows/macOS packaging checks. Real provider acceptance remains separate from offline tests.
+- `a2l compare <baseline-run-id> <candidate-run-id> [--json]`: shareable observed-run comparison, refusal of incomplete/mismatched evidence, and explicit unknown total usage when either provider does not report it.
 - ZCode Harness availability adapter: bounded Desktop presence checks, no redistributed runtime, and explicit refusal until an external execution contract is verified. No execution, resume, authentication or workspace capability is claimed.
 
 All notable changes are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/).
+
+### Fixed
+- Windows npm-shim harness help probes now resolve the shebang executable consistently with version probes.
 
 ## [0.3.2] — 2026-09-17
 
