@@ -2,6 +2,7 @@ const fs=require('node:fs');const path=require('node:path');const {execFileSync}
 const dir=path.join(__dirname,'runtime');fs.mkdirSync(dir,{recursive:true});const root=path.resolve(__dirname,'..');
 const product=require('./product.json');
 if(product.kind==='agent'){
+ execFileSync(process.execPath,[path.join(root,'node_modules','typescript','bin','tsc'),'-b',path.join(root,'tsconfig.json')],{cwd:root,stdio:'inherit'});
  require(path.join(root,'node_modules','esbuild')).buildSync({entryPoints:[path.join(root,'packages/pairs/src/index.ts')],bundle:true,platform:'node',format:'cjs',outfile:path.join(dir,'agent-core.cjs')});
  const codexRoot=path.dirname(require.resolve('@openai/codex/package.json'));
  const nativeName='@openai/codex-'+process.platform+'-'+process.arch;

@@ -90,6 +90,11 @@
     "portable": {
       "artifactName": "agent2llm-${version}-Portable-${arch}.${ext}"
     },
-    "icon": "icons/icon.png"
+    "icon": "icons/icon.png",
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nanhudev/agent2llm.git"
   }
 }
