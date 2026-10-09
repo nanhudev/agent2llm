@@ -13,6 +13,7 @@ All notable changes are documented here. Format follows
 [Semantic Versioning](https://semver.org/).
 
 ### Fixed
+- Desktop Chinese text now uses a bundled offline Noto Sans SC font, including Linux release screenshots. Updated product colors, responsive layouts, navigation and interaction motion respect reduced-motion settings; UI checks verify actual font rendering in packaged windows.
 - Windows npm-shim harness help probes now resolve the shebang executable consistently with version probes.
 
 ## [0.3.2] — 2026-09-17
