@@ -12,7 +12,8 @@
     "package": "node stage.cjs && electron-builder --publish never",
     "package:win": "node stage.cjs && electron-builder --win --x64 --publish never",
     "test:ui": "node smoke.cjs",
-    "test:package": "node package-check.cjs"
+    "test:package": "node package-check.cjs",
+    "package:linux": "node stage.cjs && electron-builder --linux --x64 --publish never"
   },
   "dependencies": {
     "jose": "6.2.12",
@@ -91,7 +92,33 @@
       "artifactName": "agent2llm-${version}-Portable-${arch}.${ext}"
     },
     "icon": "icons/icon.png",
-    "publish": null
+    "publish": null,
+    "linux": {
+      "target": [
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "AppImage"
+        },
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "deb"
+        }
+      ],
+      "executableName": "agent2llm",
+      "category": "Development",
+      "maintainer": "nanhudev",
+      "icon": "icons/icon.png"
+    },
+    "appImage": {
+      "artifactName": "agent2llm-${version}-linux-x64.${ext}"
+    },
+    "deb": {
+      "artifactName": "agent2llm-${version}-linux-amd64.${ext}"
+    }
   },
   "repository": {
     "type": "git",
