@@ -17,3 +17,9 @@ agent2llm-*.tgz
 
 # Throwaway probe scripts written while debugging an adapter by hand.
 scratch-*.mjs
+
+# Desktop build outputs
+desktop/node_modules/
+desktop/dist/
+desktop/runtime/
+desktop/test-results/

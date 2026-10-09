@@ -119,11 +119,12 @@ export abstract class CliHarnessAdapter extends BaseHarnessAdapter {
    * `--sandbox` and friends. Probe the subcommand first when one is declared.
    */
   private async readHelpFor(binPath: string): Promise<string | null> {
+    const invocation = toSpawnable(binPath, []);
     if (this.profile.helpSubcommand) {
-      const sub = await readHelp(binPath, [this.profile.helpSubcommand]).catch(() => null);
+      const sub = await readHelp(invocation.bin, [...invocation.args, this.profile.helpSubcommand]).catch(() => null);
       if (sub) return sub;
     }
-    return readHelp(binPath).catch(() => null);
+    return readHelp(invocation.bin, invocation.args).catch(() => null);
   }
 
   protected isDetected(): boolean {

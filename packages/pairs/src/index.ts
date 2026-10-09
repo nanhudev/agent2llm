@@ -9,3 +9,4 @@ export * from "./model.js";
 export * from "./store.js";
 export * from "./context.js";
 export * from "./run-request.js";
+export * from "./compare.js";

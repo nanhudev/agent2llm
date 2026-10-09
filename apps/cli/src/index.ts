@@ -28,6 +28,7 @@ import {
 } from "./commands/session.js";
 import { runSetup, runPair, runUnpair, runLogs, runVersion, runConfigSet } from "./commands/setup.js";
 import { runReport } from "./commands/report.js";
+import { runCompare } from "./commands/compare.js";
 import { runDock } from "./commands/dock.js";
 import { runDockShortcut } from "./commands/dock-shortcut.js";
 import { usage } from "./usage.js";
@@ -289,6 +290,9 @@ async function main(): Promise<number> {
       case "logs":
         await runLogs({ json, ...(str(flags.lines) ? { lines: Number.parseInt(str(flags.lines)!, 10) } : {}) });
         return 0;
+
+      case "compare":
+        return runCompare(rest, { json });
 
       case "report":
         runReport({ json });

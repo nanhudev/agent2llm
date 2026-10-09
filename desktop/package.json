@@ -1,0 +1,100 @@
+{
+  "name": "agent2llm-desktop",
+  "version": "0.4.0",
+  "private": true,
+  "description": "把目标拆成可检查的步骤，选择项目，审阅后执行。实际改动与测试结果需要验收。",
+  "author": "nanhudev",
+  "license": "MIT",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "node stage.cjs && electron .",
+    "test": "node --test tests/*.test.cjs",
+    "package": "node stage.cjs && electron-builder --publish never",
+    "package:win": "node stage.cjs && electron-builder --win --x64 --publish never",
+    "test:ui": "node smoke.cjs",
+    "test:package": "node package-check.cjs"
+  },
+  "dependencies": {
+    "jose": "6.2.12",
+    "@openai/codex": "0.161.0"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "@playwright/test": "1.63.0"
+  },
+  "overrides": {
+    "image-size": "2.0.4"
+  },
+  "build": {
+    "appId": "dev.nanhu.agent2llm",
+    "productName": "Agent2LLM",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "*.cjs",
+      "*.json",
+      "index.html",
+      "style.css",
+      "!package-lock.json",
+      "!stage.cjs",
+      "!runtime/**",
+      "!smoke.cjs",
+      "!interactive-check.cjs",
+      "!node_modules/@openai/**",
+      "!package-check.cjs"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime",
+        "to": "runtime",
+        "filter": [
+          "agent-core.cjs",
+          "native.json",
+          "README.txt",
+          "codex-native/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "agent2llm-${version}-Setup-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": false
+    },
+    "artifactName": "agent2llm-${version}-${os}-${arch}.${ext}",
+    "portable": {
+      "artifactName": "agent2llm-${version}-Portable-${arch}.${ext}"
+    },
+    "icon": "icons/icon.png",
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nanhudev/agent2llm.git"
+  }
+}
