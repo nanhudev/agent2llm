@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Linux x64 desktop targets (AppImage and deb), with packaged-window, installed-deb and extracted-AppImage acceptance checks in native Ubuntu CI.
 - Standalone desktop workbench with official ChatGPT OAuth, reviewed execution steps, protected credentials, native Codex runtime, and Windows/macOS packaging checks. Real provider acceptance remains separate from offline tests.
 - `a2l compare <baseline-run-id> <candidate-run-id> [--json]`: shareable observed-run comparison, refusal of incomplete/mismatched evidence, and explicit unknown total usage when either provider does not report it.
 - ZCode Harness availability adapter: bounded Desktop presence checks, no redistributed runtime, and explicit refusal until an external execution contract is verified. No execution, resume, authentication or workspace capability is claimed.
