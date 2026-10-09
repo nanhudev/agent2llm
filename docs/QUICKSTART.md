@@ -2,15 +2,15 @@
 
 ## 下载安装
 
-从 [GitHub Release](https://github.com/nanhudev/agent2llm/releases/tag/desktop-v0.4.0) 下载：
+从 [GitHub Release](https://github.com/nanhudev/agent2llm/releases/tag/desktop-v0.4.1) 下载：
 
 | 你的设备 | 下载文件 |
 |---|---|
-| Windows 64 位 | `agent2llm-0.4.0-Setup-x64.exe` |
-| Windows 免安装体验 | `agent2llm-0.4.0-Portable-x64.exe` |
-| Apple Silicon Mac | `agent2llm-0.4.0-mac-arm64.dmg` |
-| Linux x64 通用便携版 | `agent2llm-0.4.0-linux-x64.AppImage` |
-| Debian / Ubuntu x64 | `agent2llm-0.4.0-linux-amd64.deb` |
+| Windows 64 位 | `agent2llm-0.4.1-Setup-x64.exe` |
+| Windows 免安装体验 | `agent2llm-0.4.1-Portable-x64.exe` |
+| Apple Silicon Mac | `agent2llm-0.4.1-mac-arm64.dmg` |
+| Linux x64 通用便携版 | `agent2llm-0.4.1-linux-x64.AppImage` |
+| Debian / Ubuntu x64 | `agent2llm-0.4.1-linux-amd64.deb` |
 
 Windows 安装版支持选择目录；便携版直接双击启动。Mac 打开 DMG，将应用拖到 Applications。目前没有 Intel Mac 安装包。桌面安装包包含运行环境，不需要为了打开界面安装 Node。
 
@@ -36,7 +36,7 @@ Windows 安装版支持选择目录；便携版直接双击启动。Mac 打开 D
 | 模型输出被校验拒绝 | 检查输入和错误说明后调整任务；应用不会把不完整输出标成成功 |
 | 需要报告问题 | 提交系统、版本、操作步骤、错误文字；不要附账户 Token 或教材隐私内容 |
 
-[更详细的构建与授权说明](DESKTOP.md) · [功能和证据边界](PRODUCT_CASE.md)
+[更详细的构建与授权说明](DESKTOP.md)
 
 
 ## Linux 使用

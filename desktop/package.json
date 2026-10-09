@@ -1,6 +1,6 @@
 {
   "name": "agent2llm-desktop",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "把目标拆成可检查的步骤，选择项目，审阅后执行。实际改动与测试结果需要验收。",
   "author": "nanhudev",
